@@ -1489,6 +1489,89 @@ function validarPermissaoAdmin(parametros) {
   return { ok: true };
 }
 
+function obterEscopoUnidadesUsuario(parametros) {
+  var id = parseInt(parametros && parametros.usuarioId, 10);
+  if (!id) {
+    return { ok: false, error: 'Acesso negado' };
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Usuários');
+  if (!sheet || sheet.getLastRow() < 2) {
+    return { ok: false, error: 'Acesso negado' };
+  }
+
+  var estrutura = obterEstruturaPlanilha(sheet);
+  var totalColunas = estrutura.ultimaColuna || 10;
+  var valores = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
+  var usuarioEncontrado = obterUsuarioPorId(id, estrutura, valores);
+  if (!usuarioEncontrado) {
+    return { ok: false, error: 'Acesso negado' };
+  }
+
+  var perfil = normalizarTextoBasico(obterValorLinha(usuarioEncontrado.linha, estrutura, 'perfil', ''));
+  var status = normalizarTextoBasico(obterValorLinha(usuarioEncontrado.linha, estrutura, 'status', ''));
+  if (status !== 'ativo') {
+    return { ok: false, error: 'Acesso negado' };
+  }
+  if (perfil === 'admin') {
+    return { ok: true, admin: true, unidades: null };
+  }
+
+  var mapasUnidades = obterMapasUnidades();
+  var unidadesTexto = obterValorLinhaFlexivel(usuarioEncontrado.linha, estrutura, ['unidades', 'unidade', 'acesso unidades'], '');
+  var unidadesLista = resolverIdsUnidadesArmazenadas(unidadesTexto, mapasUnidades);
+  var unidadesPermitidas = [];
+  unidadesLista.forEach(function(unidade) {
+    var chave = unidade !== null && unidade !== undefined ? unidade.toString().trim() : '';
+    if (!chave) {
+      return;
+    }
+    if (normalizarTextoBasico(chave) === 'all') {
+      unidadesPermitidas = null;
+      return;
+    }
+    if (unidadesPermitidas && unidadesPermitidas.indexOf(chave) === -1) {
+      unidadesPermitidas.push(chave);
+    }
+  });
+
+  return { ok: true, admin: false, unidades: unidadesPermitidas };
+}
+
+function construirIndiceArmariosPorUnidade() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Cadastro Armários');
+  var indice = {};
+  if (!sheet || sheet.getLastRow() < 2) {
+    return indice;
+  }
+
+  var estrutura = obterEstruturaPlanilha(sheet);
+  var totalColunas = estrutura.ultimaColuna || 7;
+  var linhas = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
+
+  linhas.forEach(function(linha) {
+    var armarioId = obterValorLinha(linha, estrutura, 'id', '');
+    var numeroArmario = normalizarNumeroArmario(obterValorLinha(linha, estrutura, 'numero', ''));
+    var unidade = obterValorLinha(linha, estrutura, 'unidade', '');
+    var unidadeTexto = unidade !== null && unidade !== undefined ? unidade.toString().trim() : '';
+    var chaveUnidade = unidadeTexto ? unidadeTexto : '';
+    if (!chaveUnidade) {
+      return;
+    }
+
+    if (armarioId !== null && armarioId !== undefined && armarioId !== '') {
+      indice['id:' + armarioId.toString().trim()] = chaveUnidade;
+    }
+    if (numeroArmario) {
+      indice['numero:' + numeroArmario] = chaveUnidade;
+    }
+  });
+
+  return indice;
+}
+
 // Adicionar dados iniciais de exemplo
 function adicionarDadosIniciais() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -6447,6 +6530,22 @@ function construirRegistrosImagensLegado(dados) {
 
 function getRegistrosImagens(dados) {
   try {
+    var escopoUsuario = obterEscopoUnidadesUsuario({ usuarioId: usuarioContextoRequisicaoId });
+    if (!escopoUsuario.ok) {
+      return { success: false, error: escopoUsuario.error || 'Acesso negado' };
+    }
+    var indiceArmariosUnidade = construirIndiceArmariosPorUnidade();
+    var unidadesPermitidasSet = null;
+    if (!escopoUsuario.admin && Array.isArray(escopoUsuario.unidades)) {
+      unidadesPermitidasSet = {};
+      escopoUsuario.unidades.forEach(function(unidade) {
+        var chave = unidade !== null && unidade !== undefined ? unidade.toString().trim() : '';
+        if (chave) {
+          unidadesPermitidasSet[chave] = true;
+        }
+      });
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Registro de Imagens');
     var registros = [];
@@ -6472,12 +6571,27 @@ function getRegistrosImagens(dados) {
 
     if (valoresConsolidados.length) {
       valoresConsolidados.forEach(function(linha) {
+        var armarioIdLinha = linha[1] !== null && linha[1] !== undefined ? String(linha[1]).trim() : '';
         var numeroLinha = normalizarNumeroArmario(linha[2]);
-        if (armarioIdTexto && String(linha[1]).trim() !== armarioIdTexto) {
+        var chavePorId = armarioIdLinha ? ('id:' + armarioIdLinha) : '';
+        var chavePorNumero = numeroLinha ? ('numero:' + numeroLinha) : '';
+
+        if (armarioIdTexto && armarioIdLinha !== armarioIdTexto) {
           return;
         }
         if (!armarioIdTexto && numeroFiltro && numeroLinha !== numeroFiltro) {
           return;
+        }
+        if (unidadesPermitidasSet) {
+          var unidadeReferencia = '';
+          if (chavePorId && indiceArmariosUnidade[chavePorId]) {
+            unidadeReferencia = indiceArmariosUnidade[chavePorId];
+          } else if (chavePorNumero && indiceArmariosUnidade[chavePorNumero]) {
+            unidadeReferencia = indiceArmariosUnidade[chavePorNumero];
+          }
+          if (!unidadeReferencia || !unidadesPermitidasSet[unidadeReferencia]) {
+            return;
+          }
         }
 
         possuiRegistrosArmario = true;
@@ -6504,7 +6618,7 @@ function getRegistrosImagens(dados) {
       });
     }
 
-    if (!registros.length) {
+    if (!registros.length && !unidadesPermitidasSet) {
       registros = construirRegistrosImagensLegado({ armarioId: armarioIdTexto, numeroArmario: numeroFiltro });
     }
 

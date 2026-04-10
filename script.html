@@ -6061,6 +6061,13 @@
             if (elementos.registrosImagensResumo) {
                 elementos.registrosImagensResumo.textContent = 'Carregando registros...';
             }
+            if (!perfilAtualEhAdmin() && obterUnidadesPermitidas().length === 0) {
+                exibirEstadoTabelaRegistrosImagens('Você não possui unidades autorizadas para visualizar registros de imagens.', 'error');
+                if (elementos.registrosImagensResumo) {
+                    elementos.registrosImagensResumo.textContent = 'Acesso restrito por unidade.';
+                }
+                return;
+            }
             const resultado = await callGoogleScript('getRegistrosImagens', {});
             if (!resultado || !resultado.success) {
                 exibirEstadoTabelaRegistrosImagens('Não foi possível carregar os registros em imagens.', 'error');
