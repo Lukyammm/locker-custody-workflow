@@ -7531,10 +7531,9 @@ function executarBackupSistema() {
     var totalRegistros = 0;
 
     var mapeamento = [
-      { origem: 'Visitantes', arquivo: arquivoBackupGeral },
-      { origem: 'Acompanhantes', arquivo: arquivoBackupGeral },
       { origem: 'Histórico Visitantes', arquivo: arquivoBackupGeral },
       { origem: 'Histórico Acompanhantes', arquivo: arquivoBackupGeral },
+      { origem: 'Registro de Imagens', arquivo: arquivoBackupGeral },
       { origem: 'LOGS', arquivo: arquivoBackupLogs },
       { origem: 'Termos de Responsabilidade', arquivo: arquivoBackupTermos }
     ];
