@@ -7461,16 +7461,17 @@
                     carregarDadosTabelas({ recarregarArmarios: false }).catch(erro => {
                         console.error('Erro ao atualizar tabelas localmente após liberação:', erro);
                     });
-                    const persistiu = await confirmarLiberacaoPersistida(dadosConfirmacao);
-
-                    if (!persistiu) {
-                        console.warn('Liberação concluída no backend, mas a confirmação imediata ainda não refletiu na consulta.');
-                    }
-
-                    mostrarSucesso(persistiu
-                        ? 'Armário liberado com sucesso'
-                        : 'Liberação concluída. Atualizando status do armário.');
+                    mostrarSucesso('Armário liberado com sucesso');
                     sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                    confirmarLiberacaoPersistida(dadosConfirmacao)
+                        .then(persistiu => {
+                            if (!persistiu) {
+                                console.warn('Liberação concluída no backend, mas a confirmação imediata ainda não refletiu na consulta.');
+                            }
+                        })
+                        .catch(erroConfirmacao => {
+                            console.error('Erro ao confirmar liberação em segundo plano:', erroConfirmacao);
+                        });
                     return;
                 }
 
@@ -8844,8 +8845,6 @@
                 });
             }
             const promessaSalvamento = callGoogleScript('salvarTermoCompleto', dadosTermo);
-            notificarReservaEmSegundoPlano();
-            fecharTermoModal();
             let resultado;
             try {
                 resultado = await promessaSalvamento;
@@ -8869,6 +8868,7 @@
                 return;
             }
             if (resultado?.success) {
+                fecharTermoModal();
                 try {
                     await atualizarDadosPosOperacao('Atualizando informações do armário...', null, {
                         modoRapido: true,
@@ -8886,6 +8886,7 @@
                     validarTermo: true
                 });
                 if (persistiu) {
+                    fecharTermoModal();
                     sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
                     mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
                     return;
