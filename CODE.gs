@@ -995,9 +995,13 @@ function inicializarPlanilha() {
       }
     });
     
+    // Migração para instalações já existentes: garante a coluna de troca de senha
+    // (a criação acima só escreve cabeçalhos em abas novas).
+    garantirColunaPrecisaTrocarSenha();
+
     // Adicionar alguns dados iniciais de exemplo
     adicionarDadosIniciais();
-    
+
     registrarLog('SISTEMA', 'Planilha inicializada com sucesso');
 
     limparCacheArmarios();
@@ -1008,9 +1012,50 @@ function inicializarPlanilha() {
     limparCacheMovimentacoes();
 
     return { success: true, message: 'Planilha inicializada com sucesso' };
-    
+
   } catch (error) {
     return { success: false, error: 'Erro ao processar a solicitação.' };
+  }
+}
+
+// Garante a coluna "Precisa Trocar Senha" em instalações já existentes e força a
+// rotação da senha padrão (admin123) caso ela ainda esteja em uso.
+function garantirColunaPrecisaTrocarSenha() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastColumn() < 1) {
+      return;
+    }
+    var ultimaColuna = sheet.getLastColumn();
+    var cabecalhos = sheet.getRange(1, 1, 1, ultimaColuna).getValues()[0];
+    var existe = cabecalhos.some(function(cabecalho) {
+      return normalizarTextoBasico(cabecalho) === 'precisa trocar senha';
+    });
+    if (!existe) {
+      sheet.getRange(1, ultimaColuna + 1).setValue('Precisa Trocar Senha');
+    }
+
+    if (sheet.getLastRow() < 2) {
+      return;
+    }
+    // Marca para troca obrigatória qualquer usuário que ainda use a senha padrão.
+    var estrutura = obterEstruturaPlanilha(sheet);
+    var indiceSenha = obterIndiceColuna(estrutura, 'senha', null);
+    var indiceFlag = obterIndiceColuna(estrutura, ['precisa trocar senha', 'precisatrocarsenha'], null);
+    if (indiceSenha === null || indiceSenha === undefined || indiceFlag === null || indiceFlag === undefined) {
+      return;
+    }
+    var totalColunas = estrutura.ultimaColuna || sheet.getLastColumn();
+    var valores = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
+    for (var i = 0; i < valores.length; i++) {
+      var senhaArmazenada = (valores[i][indiceSenha] || '').toString().trim();
+      if (senhaArmazenada && validarSenha('admin123', senhaArmazenada)) {
+        sheet.getRange(i + 2, indiceFlag + 1).setValue('true');
+      }
+    }
+  } catch (erro) {
+    // Migração best-effort; não deve interromper a inicialização.
   }
 }
 
@@ -1708,7 +1753,11 @@ var ACOES_ADMIN = {
   getLogs: true,
   executarBackupSistema: true,
   cadastrarUnidade: true,
-  alternarStatusUnidade: true
+  alternarStatusUnidade: true,
+  // Cadastro/ocupação de armários é restrito a admin (espelha as travas da UI:
+  // "Apenas administradores podem registrar ocupações" e a página de cadastro físico).
+  cadastrarArmario: true,
+  cadastrarArmarioFisico: true
 };
 
 // Ações permitidas mesmo quando o usuário precisa trocar a senha.
