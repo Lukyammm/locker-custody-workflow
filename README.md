@@ -1,49 +1,48 @@
 # Administrative Workflow System
 
-Administrative system for managing records, workflows, and operational information.
+Repository: `administrative-workflow-system`
 
 ## Overview
 
-This project was developed to solve real operational problems using web technologies and Google Workspace tools.
+Administrative web app for controlled locker usage, custody terms, user sessions, notifications, and audit trails.
 
-## Features
+## Main Capabilities
 
-- Dashboard interface
-- Process automation
-- Data organization
-- KPI monitoring
-- Responsive design
-- Google Workspace integration
+- Cosign-style sidebar with dashboard, lockers, terms, notifications, and audit views.
+- Locker state monitoring for in-use, available, expiring, contingency, and overdue records.
+- Draft persistence for custody terms and locker movements.
+- Header preferences for profile, unit, theme, avatar, and session state.
+
+## Operating Flow
+
+1. The user signs in and selects profile and unit context.
+2. The dashboard shows locker availability and overdue items.
+3. The term workflow collects required fields, saves drafts, and registers the movement.
+4. Notifications and audit entries keep the operation traceable.
+
+## Visual System Guide
+
+> The screens below are documentation mockups based on the components, labels, colors, and workflows found in this repository. All displayed data is fictitious and does not represent real patients, staff members, or institutions.
+
+### Cosign - locker dashboard
+![Cosign - locker dashboard](./docs/screenshots/dashboard.svg)
+
+### Cosign - terms and release workflow
+![Cosign - terms and release workflow](./docs/screenshots/workflow-board.svg)
+
+### Cosign - audit and session state
+![Cosign - audit and session state](./docs/screenshots/audit-log.svg)
+
+## Data Privacy
+
+The repository documentation and guide images use fictitious sample data only.
 
 ## Technologies
 
 - JavaScript
-- HTML
-- CSS
+- HTML/CSS
 - Google Apps Script
 - Google Sheets
-- Looker Studio
-
-## Purpose
-
-The goal of this project is to improve operational efficiency, reduce manual work, and support better decision-making through automation and clear data visualization.
-
-
-
-
-
-## Guia visual do sistema
-
-> Telas demonstrativas baseadas nos componentes, textos, cores e fluxos encontrados no código deste repositório. Os dados exibidos são fictícios e não representam pacientes, profissionais ou instituições reais.
-
-### Cosign - dashboard de armários
-![Cosign - dashboard de armários](./docs/screenshots/dashboard.svg)
-
-### Cosign - termos e liberação
-![Cosign - termos e liberação](./docs/screenshots/workflow-board.svg)
-
-### Cosign - auditoria e sessão
-![Cosign - auditoria e sessão](./docs/screenshots/audit-log.svg)
 
 ## Status
 
