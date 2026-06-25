@@ -2160,7 +2160,7 @@
                 return;
             }
             const anoAtual = new Date().getFullYear();
-            elementos.footerSignature.textContent = `© ${anoAtual} – COSIGN · by Cygnus`;
+            elementos.footerSignature.textContent = `© ${anoAtual} – Cosign · by Lukyam`;
         }
         // Inicialização
         document.addEventListener('DOMContentLoaded', function() {
@@ -5500,19 +5500,18 @@
                     termoStatus: 'pendente'
                 };
                 atualizarArmarioLocal(armario.id, atualizacoesLocais);
-
-                if (recarregarApos) {
-                    await carregarArmarios({ forcarAtualizacao: true });
-                }
-
                 atualizarResumoDashboardLocal();
                 atualizarInterface();
                 carregarDadosTabelas({ recarregarArmarios: false }).catch(console.error);
-                sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
 
                 if (!silencioso) {
                     mostrarSucesso('Armário ocupado com sucesso.');
                 }
+
+                if (recarregarApos) {
+                    carregarArmarios({ forcarAtualizacao: true }).catch(console.error);
+                }
+                sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
                 return true;
             } finally {
                 finalizar();
@@ -9043,15 +9042,13 @@
             }
             if (resultado?.success) {
                 fecharTermoModal();
-                try {
-                    await atualizarDadosPosOperacao('Atualizando informações do armário...', null, {
-                        modoRapido: true,
-                        timeoutRapido: 600
-                    });
-                } catch (erroAtualizacao) {
-                    console.error('Erro ao atualizar dados após salvar termo:', erroAtualizacao);
-                }
                 mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
+                atualizarDadosPosOperacao('Atualizando informações do armário...', null, {
+                    modoRapido: true,
+                    timeoutRapido: 600
+                }).catch(erroAtualizacao => {
+                    console.error('Erro ao atualizar dados após salvar termo:', erroAtualizacao);
+                });
             } else {
                 const persistiu = await confirmarPersistenciaArmario({
                     idInterface: armarioIdLocal,
@@ -9556,6 +9553,21 @@
 
                 if (quantidadeTotal <= 0) return;
 
+                if (quantidadeTotal === 1) {
+                    const removerAtualCheck = Number(linha.dataset.removerQuantidade) || 0;
+                    if (removerAtualCheck > 0) {
+                        linha.dataset.removerQuantidade = '0';
+                    } else {
+                        linha.dataset.removerQuantidade = '1';
+                    }
+                    atualizarIndicadorRemocao(linha);
+                    botaoRemover.title = Number(linha.dataset.removerQuantidade) > 0
+                        ? 'Clique para cancelar a retirada deste item'
+                        : 'Definir a quantidade a retirar';
+                    atualizarContadorItensMovimentacao();
+                    return;
+                }
+
                 const confirmacao = await Swal.fire({
                     target: elementos.movimentacaoModal?.querySelector('.modal-content') || elementos.movimentacaoModal || document.body,
                     backdrop: false,
@@ -9904,7 +9916,7 @@
                             <label class="modal-transfer-label" for="saida-novo-qtd">Quantidade</label>
                             <div class="modal-transfer-input">
                                 <i class="fas fa-hashtag" aria-hidden="true"></i>
-                                <input type="number" id="saida-novo-qtd" min="1" step="1" class="modal-transfer-field" placeholder="1">
+                                <input type="number" id="saida-novo-qtd" min="1" step="1" class="modal-transfer-field" placeholder="1" value="1">
                             </div>
                         </div>
                     </div>
@@ -9945,7 +9957,11 @@
                 }
             });
             if (resultado.isConfirmed && resultado.value) {
-                criarLinhaSaida(resultado.value, 'novo');
+                const linhaNova = criarLinhaSaida(resultado.value, 'novo');
+                if (linhaNova) {
+                    linhaNova.dataset.removerQuantidade = String(resultado.value.quantidade || 1);
+                    atualizarIndicadorRemocao(linhaNova);
+                }
                 atualizarContadorItensMovimentacao();
             }
         }
@@ -10803,9 +10819,8 @@
                 willOpen: () => atualizarResumoModal('carregando')
             });
 
-            await termoPromise.catch(() => {});
-
             if (!resultadoConfirmacao.isConfirmed) {
+                await termoPromise.catch(() => {});
                 return;
             }
 
@@ -10904,6 +10919,9 @@
                     garantirArmarioLiberadoLocal(id, metodo, confirmacao);
                     atualizarResumoDashboardLocal();
                     atualizarInterface();
+                    carregarDadosTabelas({ recarregarArmarios: false }).catch(erro => {
+                        console.error('Erro ao atualizar tabelas após encerramento:', erro);
+                    });
 
                     const tarefaAtualizacao = atualizarDadosPosOperacao('Atualizando status do armário...', null, {
                         modoRapido: true,
