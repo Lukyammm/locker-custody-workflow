@@ -1267,19 +1267,8 @@
                             <p class="helper-text">Confira os dados antes de assinar.</p>
                         </div>
                         <div class="mov-review" id="mov-review"></div>
-                        <details class="mov-collapse">
-                            <summary>Editar data e hora</summary>
-                            <div class="mov-meta-row mov-meta-edit">
-                                <div class="form-group">
-                                    <label for="mov-data">Data</label>
-                                    <input type="date" id="mov-data" class="form-control" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="mov-hora">Hora</label>
-                                    <input type="time" id="mov-hora" class="form-control" required>
-                                </div>
-                            </div>
-                        </details>
+                        <input type="hidden" id="mov-data">
+                        <input type="hidden" id="mov-hora">
                         <details class="mov-collapse">
                             <summary>Ver histórico</summary>
                             <div class="movimentacoes-list" id="movimentacoes-list"></div>
