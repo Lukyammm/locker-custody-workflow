@@ -2761,6 +2761,340 @@
             box-shadow: 0 8px 18px color-mix(in srgb, var(--shadow-color) 76%, transparent);
             transform: translateY(-4px);
         }
+
+        /* ── MODO MAPA: grid compacto de armários ── */
+        .view-toggle-group {
+            display: flex;
+            gap: 4px;
+            background: color-mix(in srgb, var(--surface-color) 80%, var(--bg-color) 20%);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 3px;
+        }
+        .view-toggle-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .view-toggle-btn.active {
+            background: var(--surface-color);
+            color: var(--primary-color);
+            box-shadow: var(--shadow-sm);
+        }
+        .armarios-grid.modo-mapa {
+            grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+            gap: 8px;
+        }
+        .armarios-grid.modo-mapa .armario-card {
+            padding: 0;
+            gap: 0;
+            aspect-ratio: 3 / 4;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+        .armarios-grid.modo-mapa .armario-status-bar {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            border-radius: 0;
+        }
+        .armarios-grid.modo-mapa .armario-header.minimal {
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 0;
+            margin-top: 8px;
+            width: 100%;
+        }
+        .armarios-grid.modo-mapa .armario-identificacao {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .armarios-grid.modo-mapa .armario-number.prominent {
+            font-size: 1.1rem;
+        }
+        .armarios-grid.modo-mapa .armario-status-icon {
+            width: 28px;
+            height: 28px;
+            font-size: 0.8rem;
+        }
+        .armarios-grid.modo-mapa .armario-paciente-line {
+            font-size: 0.6rem;
+            padding: 0 6px 8px;
+            text-align: center;
+            -webkit-line-clamp: 2;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            white-space: normal;
+            max-width: 100%;
+        }
+        .armarios-grid.modo-mapa .armario-card:hover {
+            transform: translateY(-3px) scale(1.04);
+            z-index: 2;
+        }
+        .armarios-grid.modo-mapa .armario-card.contingencia::before,
+        .armarios-grid.modo-mapa .armario-card.alta-registrada::before {
+            border-radius: var(--radius-md);
+        }
+        /* ── SIDEBAR PIN (desktop expandida permanente) ── */
+        .sidebar-pin-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.45);
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 4px;
+            border-radius: 6px;
+            transition: color 0.2s, background 0.2s;
+            line-height: 1;
+            align-self: flex-end;
+        }
+        .sidebar-pin-btn:hover {
+            color: rgba(255,255,255,0.85);
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar-pin-btn.pinned {
+            color: rgba(255,255,255,0.9);
+        }
+        @media (min-width: 1025px) {
+            .sidebar-pin-btn { display: flex; align-items: center; justify-content: center; }
+        }
+        body.sidebar-expandida .sidebar {
+            width: var(--sidebar-width) !important;
+            align-items: stretch !important;
+        }
+        body.sidebar-expandida .sidebar .sidebar-header p,
+        body.sidebar-expandida .sidebar .sidebar-title,
+        body.sidebar-expandida .sidebar .sidebar-menu span,
+        body.sidebar-expandida .sidebar .sidebar-logout-button span {
+            display: inline !important;
+        }
+        body.sidebar-expandida .sidebar .sidebar-title { display: inline-flex !important; }
+        body.sidebar-expandida .sidebar .sidebar-header p { display: block !important; }
+        body.sidebar-expandida .sidebar .sidebar-menu a {
+            justify-content: flex-start !important;
+            gap: 10px !important;
+            padding: 12px 20px !important;
+            border-left: 4px solid transparent !important;
+            text-align: left !important;
+        }
+        body.sidebar-expandida .sidebar .sidebar-logout-button {
+            justify-content: flex-start !important;
+            gap: 10px !important;
+            padding: 12px 16px !important;
+        }
+        body.sidebar-expandida .main-content {
+            margin-left: var(--sidebar-width) !important;
+        }
+
+        /* ── EMPTY STATE ILUSTRADO ── */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 24px;
+            gap: 16px;
+            text-align: center;
+        }
+        .empty-state-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 20px;
+            background: color-mix(in srgb, var(--primary-color) 10%, var(--surface-color) 90%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--primary-color);
+            box-shadow: 0 8px 24px color-mix(in srgb, var(--primary-color) 18%, transparent);
+        }
+        .empty-state-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--dark-color);
+        }
+        .empty-state-desc {
+            font-size: 0.87rem;
+            color: var(--muted-color);
+            max-width: 320px;
+            line-height: 1.5;
+        }
+        .empty-state-action {
+            margin-top: 4px;
+            padding: 10px 22px;
+            border-radius: var(--radius-md);
+            border: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent);
+            background: color-mix(in srgb, var(--primary-color) 10%, var(--surface-color) 90%);
+            color: var(--primary-color);
+            font-weight: 700;
+            font-size: 0.88rem;
+            cursor: pointer;
+            transition: background 0.18s, box-shadow 0.18s;
+        }
+        .empty-state-action:hover {
+            background: color-mix(in srgb, var(--primary-color) 18%, var(--surface-color) 82%);
+            box-shadow: 0 6px 18px color-mix(in srgb, var(--primary-color) 20%, transparent);
+        }
+
+        /* ── TIMELINE HISTÓRICO ── */
+        .historico-view-toggle {
+            display: flex;
+            gap: 4px;
+            background: color-mix(in srgb, var(--surface-color) 80%, var(--bg-color) 20%);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 3px;
+        }
+        .historico-view-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted-color);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: background 0.15s, color 0.15s;
+        }
+        .historico-view-btn.active {
+            background: var(--surface-color);
+            color: var(--primary-color);
+            box-shadow: var(--shadow-sm);
+        }
+        .timeline-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            padding: 8px 0 24px;
+            position: relative;
+        }
+        .timeline-container::before {
+            content: '';
+            position: absolute;
+            left: 31px;
+            top: 8px;
+            bottom: 8px;
+            width: 2px;
+            background: linear-gradient(to bottom,
+                color-mix(in srgb, var(--primary-color) 30%, transparent),
+                color-mix(in srgb, var(--border-color) 60%, transparent));
+            border-radius: 2px;
+        }
+        .timeline-item {
+            display: flex;
+            gap: 16px;
+            padding: 8px 16px 8px 0;
+            position: relative;
+        }
+        .timeline-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--color-neutral-0);
+            background: color-mix(in srgb, var(--em-uso-base) 70%, var(--primary-color) 30%);
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 0 0 3px var(--surface-color), 0 0 0 5px color-mix(in srgb, var(--primary-color) 20%, transparent);
+        }
+        .timeline-body {
+            flex: 1;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.15s;
+        }
+        .timeline-body:hover {
+            box-shadow: var(--shadow-md);
+        }
+        .timeline-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+        .timeline-nome {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--dark-color);
+        }
+        .timeline-time {
+            font-size: 0.75rem;
+            color: var(--muted-color);
+            white-space: nowrap;
+        }
+        .timeline-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .timeline-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: color-mix(in srgb, var(--primary-color) 10%, var(--surface-color) 90%);
+            color: color-mix(in srgb, var(--primary-color) 80%, var(--dark-color) 20%);
+            border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
+        }
+        .timeline-chip.chip-armario {
+            background: color-mix(in srgb, var(--em-uso-base) 10%, var(--surface-color) 90%);
+            color: color-mix(in srgb, var(--em-uso-base) 80%, var(--dark-color) 20%);
+            border-color: color-mix(in srgb, var(--em-uso-base) 22%, transparent);
+        }
+        .timeline-chip.chip-status-livre {
+            background: color-mix(in srgb, var(--status-livre) 12%, var(--surface-color) 88%);
+            color: color-mix(in srgb, var(--status-livre) 70%, var(--dark-color) 30%);
+            border-color: color-mix(in srgb, var(--status-livre) 28%, transparent);
+        }
+        .timeline-chip.chip-status-em-uso {
+            background: color-mix(in srgb, var(--status-em-uso) 12%, var(--surface-color) 88%);
+            color: color-mix(in srgb, var(--status-em-uso) 70%, var(--dark-color) 30%);
+            border-color: color-mix(in srgb, var(--status-em-uso) 28%, transparent);
+        }
+        .timeline-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 4px 16px;
+            font-size: 0.8rem;
+            color: var(--muted-color);
+        }
+        .timeline-meta span strong {
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
         .armario-card.alta-registrada {
             border: 1.5px solid color-mix(in srgb, var(--danger-color) 65%, var(--dark-color) 15%);
             background-image: radial-gradient(circle at 12px 12px, color-mix(in srgb, var(--danger-color) 12%, transparent) 1.5px, transparent 0);
