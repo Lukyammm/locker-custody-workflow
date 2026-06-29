@@ -5471,14 +5471,79 @@ function getTermo(dados) {
       termo = termoFinalizadoMaisRecente;
     }
 
+    if (!termo && incluirFinalizados) {
+      var linhasBackup = obterLinhasSheetAtualEBackups('Termos de Responsabilidade', {
+        tipoArquivo: 'termos',
+        incluirPlanilhaAtual: false,
+        colunasMinimas: 20
+      });
+      var termoBackupMaisRecente = null;
+      for (var b = linhasBackup.length - 1; b >= 0; b--) {
+        var bLinha = linhasBackup[b];
+        if (!bLinha[0]) continue;
+        var bIdTexto = bLinha[1] !== null && bLinha[1] !== undefined ? bLinha[1].toString().trim() : '';
+        if (armarioIdInformado && bIdTexto !== armarioIdInformado) continue;
+        var bNumero = normalizarNumeroArmario(bLinha[2] ? bLinha[2].toString().trim() : '');
+        if (numeroInformado && bNumero !== numeroInformado) continue;
+        var bAssinaturas = normalizarAssinaturas(bLinha[18]);
+        var bStatusBruto = bLinha[19] || '';
+        var bStatusNorm = normalizarTextoBasico(bStatusBruto);
+        var bPdf = Boolean(bLinha[17]);
+        var bFinalizado = Boolean(bPdf || bStatusNorm === 'finalizado' || (bAssinaturas && bAssinaturas.finalizadoEm));
+        var bVolumes = [];
+        if (bLinha[14]) { try { bVolumes = JSON.parse(bLinha[14]); } catch (eVol) { bVolumes = []; } }
+        var bOrientacoes = bLinha[13] ? bLinha[13].split(',').filter(String) : [];
+        var termoBackup = {
+          id: bLinha[0],
+          armarioId: bLinha[1],
+          numeroArmario: bLinha[2] ? bLinha[2].toString().trim() : '',
+          paciente: bLinha[3],
+          prontuario: bLinha[4],
+          nascimento: bLinha[5],
+          setor: bLinha[6],
+          leito: bLinha[7],
+          consciente: bLinha[8],
+          acompanhante: bLinha[9],
+          telefone: bLinha[10],
+          documento: bLinha[11],
+          parentesco: bLinha[12],
+          orientacoes: bOrientacoes,
+          volumes: Array.isArray(bVolumes) ? bVolumes : [],
+          descricaoVolumes: bLinha[15],
+          aplicadoEm: bLinha[16],
+          pdfUrl: bLinha[17],
+          assinaturaBase64: bAssinaturas.inicial,
+          assinaturaMimeInicial: bAssinaturas.mimeInicial || 'image/png',
+          assinaturaMimeFinal: bAssinaturas.mimeFinal || 'image/png',
+          assinaturas: bAssinaturas,
+          finalizadoEm: bAssinaturas.finalizadoEm,
+          metodoFinal: bAssinaturas.metodoFinal,
+          cpfConfirmacao: bAssinaturas.cpfFinal,
+          status: bStatusBruto,
+          statusNormalizado: bStatusNorm,
+          finalizado: bFinalizado
+        };
+        if (!bFinalizado) {
+          termo = termoBackup;
+          break;
+        }
+        if (!termoBackupMaisRecente) {
+          termoBackupMaisRecente = termoBackup;
+        }
+      }
+      if (!termo && termoBackupMaisRecente) {
+        termo = termoBackupMaisRecente;
+      }
+    }
+
     if (!termo) {
       return { success: false, error: 'Termo não encontrado' };
     }
 
     return { success: true, data: termo };
-    
+
   } catch (error) {
-    registrarLog('ERRO', `Erro ao buscar termo: ${error.toString()}`);
+    registrarLog('ERRO', 'Erro ao buscar termo: ' + error.toString());
     return { success: false, error: error.toString() };
   }
 }
@@ -6473,10 +6538,9 @@ function getRegistrosImagens(dados) {
     if (valoresConsolidados.length) {
       valoresConsolidados.forEach(function(linha) {
         var numeroLinha = normalizarNumeroArmario(linha[2]);
-        if (armarioIdTexto && String(linha[1]).trim() !== armarioIdTexto) {
-          return;
-        }
-        if (!armarioIdTexto && numeroFiltro && numeroLinha !== numeroFiltro) {
+        var idLinhaBate = armarioIdTexto && String(linha[1]).trim() === armarioIdTexto;
+        var numeroLinhaBate = numeroFiltro && numeroLinha === numeroFiltro;
+        if ((armarioIdTexto || numeroFiltro) && !idLinhaBate && !numeroLinhaBate) {
           return;
         }
 
@@ -6807,17 +6871,27 @@ function getMovimentacoes(dados) {
         colunaFotoId
       );
       var dadosMovimentacoes = sheet.getRange(2, 1, totalLinhas, largura).getValues();
+      var dadosBackupMov = [];
+      if (incluirFinalizados) {
+        dadosBackupMov = obterLinhasSheetAtualEBackups('Movimentações', {
+          tipoArquivo: 'geral',
+          incluirPlanilhaAtual: false,
+          colunasMinimas: largura
+        });
+      }
+      var todasAsLinhas = dadosMovimentacoes.concat(dadosBackupMov);
+
       var movimentacoes = [];
-      for (var j = 0; j < dadosMovimentacoes.length; j++) {
-        var linhaDados = dadosMovimentacoes[j];
+      var idsRegistrados = {};
+      for (var j = 0; j < todasAsLinhas.length; j++) {
+        var linhaDados = todasAsLinhas[j];
         var idLinha = linhaDados[1];
         var idLinhaTexto = idLinha !== null && idLinha !== undefined ? idLinha.toString().trim() : '';
-        if (armarioIdTexto && idLinhaTexto !== armarioIdTexto) {
-          continue;
-        }
-
         var numeroLinhaNormalizado = normalizarNumeroArmario(linhaDados[2]);
-        if (numeroInformado && numeroLinhaNormalizado !== numeroInformado) {
+
+        var idMovBate = armarioIdTexto && idLinhaTexto === armarioIdTexto;
+        var numeroMovBate = numeroInformado && numeroLinhaNormalizado === numeroInformado;
+        if ((armarioIdTexto || numeroInformado) && !idMovBate && !numeroMovBate) {
           continue;
         }
 
@@ -6830,6 +6904,14 @@ function getMovimentacoes(dados) {
         var statusNormalizado = normalizarTextoBasico(statusLinha);
         if (!incluirFinalizados && statusNormalizado === 'finalizado') {
           continue;
+        }
+
+        var idRegistro = linhaDados[0] ? linhaDados[0].toString() : '';
+        if (idRegistro && idsRegistrados[idRegistro]) {
+          continue;
+        }
+        if (idRegistro) {
+          idsRegistrados[idRegistro] = true;
         }
 
         var itensValor = colunaItens && colunaItens <= linhaDados.length ? linhaDados[colunaItens - 1] : '';
