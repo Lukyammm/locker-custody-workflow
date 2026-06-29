@@ -3256,21 +3256,32 @@
                 finalizarLoading();
             }
         }
-        function mostrarErro(mensagem) {
-            Swal.fire({
-                title: 'Erro',
-                text: mensagem,
-                icon: 'error',
-                confirmButtonText: 'OK'
+        function dispararToast(mensagem, icon, timer) {
+            return Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon,
+                title: mensagem,
+                showConfirmButton: false,
+                timer,
+                timerProgressBar: true,
+                width: 'auto',
+                didOpen: (toast) => {
+                    toast.addEventListener('mouseenter', Swal.stopTimer);
+                    toast.addEventListener('mouseleave', Swal.resumeTimer);
+                }
             });
         }
+        function mostrarErro(mensagem) {
+            // Toast discreto (uso em tablet): canto superior, sem bloquear a tela.
+            // Erros ficam mais tempo visíveis que os sucessos.
+            return dispararToast(mensagem, 'error', 5000);
+        }
         function mostrarSucesso(mensagem) {
-            Swal.fire({
-                title: 'Sucesso!',
-                text: mensagem,
-                icon: 'success',
-                confirmButtonText: 'OK'
-            });
+            return dispararToast(mensagem, 'success', 2500);
+        }
+        function mostrarAviso(mensagem) {
+            return dispararToast(mensagem, 'warning', 4000);
         }
         function notificarErroPadrao(resultado, mensagemPadrao = 'Ocorreu um erro inesperado') {
             if (!resultado || resultado._erroNotificado) {
@@ -6477,12 +6488,7 @@
                 renderizarTabelaUnidades();
                 carregarDadosTabelas();
                 atualizarInterface();
-                await Swal.fire({
-                    title: 'Unidade atualizada',
-                    text: `A unidade ${nomeExibicao} agora está ${unidade.status === 'ativa' ? 'ativa' : 'inativa'}.`,
-                    icon: 'success',
-                    confirmButtonText: 'OK'
-                });
+                mostrarSucesso(`Unidade ${nomeExibicao} agora está ${unidade.status === 'ativa' ? 'ativa' : 'inativa'}.`);
             } else {
                 notificarErroPadrao(resultado);
             }
@@ -6517,12 +6523,7 @@
                 });
                 atualizarSeletoresUnidade();
                 renderizarTabelaUnidades();
-                await Swal.fire({
-                    title: 'Sucesso!',
-                    text: 'Unidade cadastrada com sucesso',
-                    icon: 'success',
-                    confirmButtonText: 'OK'
-                });
+                mostrarSucesso('Unidade cadastrada com sucesso');
             } else {
                 notificarErroPadrao(resultado);
             }
@@ -6878,11 +6879,7 @@
             }
             const livres = obterArmariosAcompanhantesLivres();
             if (!livres.length) {
-                await Swal.fire({
-                    title: 'Nenhum armário livre',
-                    text: 'Cadastre ou libere um armário para transferir esta contingência.',
-                    icon: 'warning'
-                });
+                mostrarAviso('Nenhum armário livre. Cadastre ou libere um armário para transferir esta contingência.');
                 return;
             }
 
@@ -7300,23 +7297,13 @@
             if (armarioLivre) {
                 abrirModalArmario(armarioLivre);
             } else {
-                await Swal.fire({
-                    title: 'Sem armários disponíveis',
-                    text: `Não há armários ${tipo === 'visitante' ? 'de visitantes' : 'de acompanhantes'} disponíveis no momento.`,
-                    icon: 'warning',
-                    confirmButtonText: 'OK'
-                });
+                mostrarAviso(`Não há armários ${tipo === 'visitante' ? 'de visitantes' : 'de acompanhantes'} disponíveis no momento.`);
             }
         }
         // Abrir modal para novo armário físico
         async function abrirModalNovoArmarioFisico() {
             if (!estado.unidades.length) {
-                await Swal.fire({
-                    title: 'Nenhuma unidade cadastrada',
-                    text: 'Cadastre uma unidade antes de adicionar novos armários.',
-                    icon: 'warning',
-                    confirmButtonText: 'OK'
-                });
+                mostrarAviso('Cadastre uma unidade antes de adicionar novos armários.');
                 return;
             }
             const opcoesUnidades = estado.unidades.map(unidade => {
@@ -7421,12 +7408,7 @@
                 await carregarEstatisticas();
                 atualizarInterface();
                 carregarDadosTabelas();
-                await Swal.fire({
-                    title: 'Sucesso!',
-                    text: `${cadastroResultado.numeros.length} armário(s) cadastrados: ${cadastroResultado.numeros.join(', ')}`,
-                    icon: 'success',
-                    confirmButtonText: 'OK'
-                });
+                mostrarSucesso(`${cadastroResultado.numeros.length} armário(s) cadastrados: ${cadastroResultado.numeros.join(', ')}`);
             } else {
                 notificarErroPadrao(cadastroResultado);
             }
@@ -10821,12 +10803,7 @@
             const acompanhante = termoDados?.acompanhante || armario.nomeVisitante || '-';
             const assinaturaFinal = await coletarAssinaturaEncerramento(acompanhante);
             if (!assinaturaFinal || !assinaturaFinal.assinatura?.base64) {
-                await Swal.fire({
-                    title: 'Liberação cancelada',
-                    text: 'A assinatura de encerramento não foi coletada. O armário permanecerá ativo.',
-                    icon: 'info',
-                    confirmButtonText: 'Entendi'
-                });
+                mostrarAviso('Liberação cancelada: a assinatura de encerramento não foi coletada. O armário permanecerá ativo.');
                 return;
             }
 
