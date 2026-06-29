@@ -48,6 +48,9 @@
                         <span class="brand-text">Cosign</span>
                     </div>
                 </div>
+                <button id="sidebar-pin-btn" class="sidebar-pin-btn" type="button" aria-label="Fixar menu expandido" title="Fixar menu">
+                    <i class="fas fa-thumbtack"></i>
+                </button>
                 <p>Hospital Universitário do Ceará</p>
             </div>
             <nav class="sidebar-menu">
@@ -214,9 +217,17 @@
                             <i class="fas fa-person-walking-luggage" aria-hidden="true"></i>
                             Sem Armários
                         </button>
+                        <div class="view-toggle-group" aria-label="Alternar visualização" role="group">
+                            <button class="view-toggle-btn active" id="view-btn-grid" type="button" aria-label="Visualização em cards" title="Cards">
+                                <i class="fas fa-th-large" aria-hidden="true"></i>
+                            </button>
+                            <button class="view-toggle-btn" id="view-btn-mapa" type="button" aria-label="Visualização em mapa" title="Mapa compacto">
+                                <i class="fas fa-map-marked-alt" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <!-- Tabela de Armários -->
+                <!-- Grade de Armários -->
                 <div class="armarios-grid" id="armarios-container">
                     <!-- Os armários serão carregados aqui via JavaScript -->
                 </div>
@@ -294,6 +305,14 @@
                             <h3>Histórico de Visitantes</h3>
                             <p class="table-subtitle">Filtre por período, pessoas ou palavra-chave.</p>
                         </div>
+                        <div class="historico-view-toggle" role="group" aria-label="Modo de exibição">
+                            <button class="historico-view-btn active" id="hv-btn-tabela" type="button" data-view="tabela">
+                                <i class="fas fa-table" aria-hidden="true"></i> Tabela
+                            </button>
+                            <button class="historico-view-btn" id="hv-btn-timeline" type="button" data-view="timeline">
+                                <i class="fas fa-stream" aria-hidden="true"></i> Timeline
+                            </button>
+                        </div>
                         <div class="table-header-controls">
                             <div class="filter-group">
                                 <label for="historico-visitantes-data-inicio">Data inicial</label>
@@ -316,7 +335,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="table-container">
+                    <div id="hv-table-container" class="table-container">
                         <table id="tabela-historico-visitantes">
                             <thead>
                                 <tr>
@@ -338,6 +357,7 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="hv-timeline-container" class="timeline-container" style="display:none"></div>
                 </div>
             </div>
             <!-- Histórico Acompanhantes -->
@@ -347,6 +367,14 @@
                         <div>
                             <h3>Histórico de Acompanhantes</h3>
                             <p class="table-subtitle">Filtre por período, pessoas ou palavra-chave.</p>
+                        </div>
+                        <div class="historico-view-toggle" role="group" aria-label="Modo de exibição">
+                            <button class="historico-view-btn active" id="ha-btn-tabela" type="button" data-view="tabela">
+                                <i class="fas fa-table" aria-hidden="true"></i> Tabela
+                            </button>
+                            <button class="historico-view-btn" id="ha-btn-timeline" type="button" data-view="timeline">
+                                <i class="fas fa-stream" aria-hidden="true"></i> Timeline
+                            </button>
                         </div>
                         <div class="table-header-controls">
                             <div class="filter-group">
@@ -370,7 +398,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="table-container">
+                    <div id="ha-table-container" class="table-container">
                         <table id="tabela-historico-acompanhantes">
                             <thead>
                                 <tr>
@@ -392,6 +420,7 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="ha-timeline-container" class="timeline-container" style="display:none"></div>
                 </div>
             </div>
             <!-- Liberação -->

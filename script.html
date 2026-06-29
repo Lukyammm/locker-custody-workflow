@@ -3382,6 +3382,80 @@
             if (elementos.sidebarBackdrop) {
                 elementos.sidebarBackdrop.addEventListener('click', fecharSidebarMobile);
             }
+
+            // ── SIDEBAR PIN (fixar expandida no desktop) ──
+            const sidebarPinBtn = document.getElementById('sidebar-pin-btn');
+            if (sidebarPinBtn) {
+                const pinnedKey = 'cosign_sidebar_pinned';
+                const aplicarPin = (pinado) => {
+                    document.body.classList.toggle('sidebar-expandida', pinado);
+                    sidebarPinBtn.classList.toggle('pinned', pinado);
+                    sidebarPinBtn.title = pinado ? 'Soltar menu' : 'Fixar menu expandido';
+                    sidebarPinBtn.setAttribute('aria-pressed', String(pinado));
+                    localStorage.setItem(pinnedKey, pinado ? '1' : '0');
+                };
+                aplicarPin(localStorage.getItem(pinnedKey) === '1');
+                sidebarPinBtn.addEventListener('click', () => {
+                    aplicarPin(!document.body.classList.contains('sidebar-expandida'));
+                });
+            }
+
+            // ── VIEW TOGGLE: mapa/grid de armários ──
+            const viewBtnGrid = document.getElementById('view-btn-grid');
+            const viewBtnMapa = document.getElementById('view-btn-mapa');
+            const armariosContainer = document.getElementById('armarios-container');
+            if (viewBtnGrid && viewBtnMapa && armariosContainer) {
+                const viewKey = 'cosign_armarios_view';
+                const aplicarView = (modo) => {
+                    armariosContainer.classList.toggle('modo-mapa', modo === 'mapa');
+                    viewBtnGrid.classList.toggle('active', modo !== 'mapa');
+                    viewBtnMapa.classList.toggle('active', modo === 'mapa');
+                    localStorage.setItem(viewKey, modo);
+                };
+                aplicarView(localStorage.getItem(viewKey) || 'grid');
+                viewBtnGrid.addEventListener('click', () => aplicarView('grid'));
+                viewBtnMapa.addEventListener('click', () => aplicarView('mapa'));
+            }
+
+            // ── TIMELINE toggle: histórico visitantes ──
+            const hvBtnTabela = document.getElementById('hv-btn-tabela');
+            const hvBtnTimeline = document.getElementById('hv-btn-timeline');
+            if (hvBtnTabela && hvBtnTimeline) {
+                const aplicarViewHV = (modo) => {
+                    const tableContainer = document.getElementById('hv-table-container');
+                    const timelineContainer = document.getElementById('hv-timeline-container');
+                    const mostrarTimeline = modo === 'timeline';
+                    if (tableContainer) tableContainer.style.display = mostrarTimeline ? 'none' : '';
+                    if (timelineContainer) timelineContainer.style.display = mostrarTimeline ? '' : 'none';
+                    hvBtnTabela.classList.toggle('active', !mostrarTimeline);
+                    hvBtnTimeline.classList.toggle('active', mostrarTimeline);
+                    localStorage.setItem('cosign_hv_view', modo);
+                    if (mostrarTimeline) renderTimelineHistorico('visitantes');
+                };
+                aplicarViewHV(localStorage.getItem('cosign_hv_view') || 'tabela');
+                hvBtnTabela.addEventListener('click', () => aplicarViewHV('tabela'));
+                hvBtnTimeline.addEventListener('click', () => aplicarViewHV('timeline'));
+            }
+
+            // ── TIMELINE toggle: histórico acompanhantes ──
+            const haBtnTabela = document.getElementById('ha-btn-tabela');
+            const haBtnTimeline = document.getElementById('ha-btn-timeline');
+            if (haBtnTabela && haBtnTimeline) {
+                const aplicarViewHA = (modo) => {
+                    const tableContainer = document.getElementById('ha-table-container');
+                    const timelineContainer = document.getElementById('ha-timeline-container');
+                    const mostrarTimeline = modo === 'timeline';
+                    if (tableContainer) tableContainer.style.display = mostrarTimeline ? 'none' : '';
+                    if (timelineContainer) timelineContainer.style.display = mostrarTimeline ? '' : 'none';
+                    haBtnTabela.classList.toggle('active', !mostrarTimeline);
+                    haBtnTimeline.classList.toggle('active', mostrarTimeline);
+                    localStorage.setItem('cosign_ha_view', modo);
+                    if (mostrarTimeline) renderTimelineHistorico('acompanhantes');
+                };
+                aplicarViewHA(localStorage.getItem('cosign_ha_view') || 'tabela');
+                haBtnTabela.addEventListener('click', () => aplicarViewHA('tabela'));
+                haBtnTimeline.addEventListener('click', () => aplicarViewHA('timeline'));
+            }
             // Seletor de perfil
             if (elementos.profileSelect) {
                 elementos.profileSelect.addEventListener('change', async function() {
@@ -6048,14 +6122,118 @@
         }
         function exibirEstadoTabelaHistorico(tbody, mensagem, tipo = 'empty', colSpan = 11) {
             if (!tbody) return;
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = colSpan;
-            td.textContent = mensagem;
-            td.className = tipo === 'loading' ? 'table-loading' : tipo === 'error' ? 'table-error' : 'table-empty';
-            tr.appendChild(td);
-            tbody.innerHTML = '';
-            tbody.appendChild(tr);
+            if (tipo === 'empty') {
+                const configuracoes = {
+                    'Nenhum registro disponível.': {
+                        icon: 'fas fa-inbox',
+                        title: 'Sem registros ainda',
+                        desc: 'Nenhum registro foi encontrado. Os dados aparecerão aqui quando houver movimentação.',
+                    },
+                    'Nenhum registro encontrado com os filtros selecionados.': {
+                        icon: 'fas fa-filter-circle-xmark',
+                        title: 'Nenhum resultado',
+                        desc: 'Nenhum registro corresponde aos filtros aplicados. Tente ampliar o período ou remover algum filtro.',
+                        acao: 'Limpar filtros',
+                        acaoClasse: 'historico-limpar-filtros',
+                    },
+                };
+                const cfg = configuracoes[mensagem] || { icon: 'fas fa-inbox', title: 'Vazio', desc: mensagem };
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = colSpan;
+                td.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="${cfg.icon}" aria-hidden="true"></i></div>
+                        <div class="empty-state-title">${cfg.title}</div>
+                        <div class="empty-state-desc">${cfg.desc}</div>
+                        ${cfg.acao ? `<button class="empty-state-action ${cfg.acaoClasse}">${cfg.acao}</button>` : ''}
+                    </div>`;
+                tbody.innerHTML = '';
+                tbody.appendChild(tr);
+                if (cfg.acaoClasse === 'historico-limpar-filtros') {
+                    td.querySelector('.historico-limpar-filtros')?.addEventListener('click', () => {
+                        document.getElementById('historico-visitantes-btn-limpar')?.click();
+                        document.getElementById('historico-acompanhantes-btn-limpar')?.click();
+                    });
+                }
+            } else {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = colSpan;
+                td.textContent = mensagem;
+                td.className = tipo === 'loading' ? 'table-loading' : 'table-error';
+                tr.appendChild(td);
+                tbody.innerHTML = '';
+                tbody.appendChild(tr);
+            }
+        }
+
+        function gerarIniciais(nome) {
+            if (!nome) return '?';
+            const partes = nome.trim().split(/\s+/);
+            if (partes.length === 1) return partes[0][0].toUpperCase();
+            return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+        }
+
+        function renderTimelineHistorico(tipo) {
+            const containerId = tipo === 'visitantes' ? 'hv-timeline-container' : 'ha-timeline-container';
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const registros = tipo === 'visitantes'
+                ? (Array.isArray(estado.historicoVisitantes) ? estado.historicoVisitantes : [])
+                : (Array.isArray(estado.historicoAcompanhantes) ? estado.historicoAcompanhantes : []);
+
+            if (!registros.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="fas fa-inbox" aria-hidden="true"></i></div>
+                        <div class="empty-state-title">Sem registros ainda</div>
+                        <div class="empty-state-desc">Os dados aparecerão aqui quando houver movimentação.</div>
+                    </div>`;
+                return;
+            }
+
+            const cores = ['#4F6F97','#5BA98C','#C67B2A','#52418F','#3B82F6','#10B981'];
+            const corPorNome = new Map();
+            let corIdx = 0;
+
+            container.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            registros.slice(0, 200).forEach(reg => {
+                if (!corPorNome.has(reg.nome)) {
+                    corPorNome.set(reg.nome, cores[corIdx % cores.length]);
+                    corIdx++;
+                }
+                const cor = corPorNome.get(reg.nome);
+                const iniciais = gerarIniciais(reg.nome);
+                const statusChipClasse = reg.status?.toLowerCase().includes('livre') ? 'chip-status-livre'
+                    : reg.status?.toLowerCase().includes('uso') ? 'chip-status-em-uso' : '';
+
+                const item = document.createElement('div');
+                item.className = 'timeline-item';
+                item.innerHTML = `
+                    <div class="timeline-avatar" style="background:${cor}" aria-label="${reg.nome || '?'}">${iniciais}</div>
+                    <div class="timeline-body">
+                        <div class="timeline-header">
+                            <span class="timeline-nome">${reg.nome || '—'}</span>
+                            <span class="timeline-time">${formatarData(reg.data)} ${reg.horaInicio ? '· ' + reg.horaInicio : ''}</span>
+                        </div>
+                        <div class="timeline-chips">
+                            ${reg.armario ? `<span class="timeline-chip chip-armario"><i class="fas fa-lock" aria-hidden="true"></i> Armário ${reg.armario}</span>` : ''}
+                            ${reg.leito ? `<span class="timeline-chip"><i class="fas fa-bed" aria-hidden="true"></i> Leito ${reg.leito}</span>` : ''}
+                            ${reg.status ? `<span class="timeline-chip ${statusChipClasse}">${reg.status}</span>` : ''}
+                        </div>
+                        <div class="timeline-meta">
+                            ${reg.paciente ? `<span><strong>Paciente:</strong> ${reg.paciente}</span>` : ''}
+                            ${reg.volumes ? `<span><strong>Volumes:</strong> ${reg.volumes}</span>` : ''}
+                            ${reg.horaFim ? `<span><strong>Saída:</strong> ${reg.horaFim}</span>` : ''}
+                            ${reg.usuario ? `<span><strong>Operador:</strong> ${reg.usuario}</span>` : ''}
+                        </div>
+                    </div>`;
+                fragment.appendChild(item);
+            });
+            container.appendChild(fragment);
         }
         function obterDataHistorico(valorData) {
             if (!valorData) return null;
@@ -6366,6 +6544,9 @@
                 `;
                 tbody.appendChild(tr);
             });
+            if (localStorage.getItem('cosign_hv_view') === 'timeline') {
+                renderTimelineHistorico('visitantes');
+            }
         }
         function aplicarFiltrosHistoricoAcompanhantes() {
             const tbody = elementos.tabelaHistoricoAcompanhantesBody;
@@ -6422,6 +6603,9 @@
                 `;
                 tbody.appendChild(tr);
             });
+            if (localStorage.getItem('cosign_ha_view') === 'timeline') {
+                renderTimelineHistorico('acompanhantes');
+            }
         }
         function atualizarSeletoresUnidade() {
             if (!elementos.unitSelect) return;
