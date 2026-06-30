@@ -223,6 +223,9 @@
             --z-overlay: 1100;
             --z-critical-overlay: 1200;
             --z-alert: 1250;
+            /* Toasts ficam acima do SweetAlert (popup em --z-alert + 1) para
+               permanecerem visíveis quando um modal está aberto. */
+            --z-toast: 1300;
         }
         [data-theme="dark"] {
             --color-primary-500: #60A5FA;
@@ -1579,7 +1582,7 @@
             position: fixed;
             top: 16px;
             right: 16px;
-            z-index: var(--z-alert);
+            z-index: var(--z-toast);
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -4032,7 +4035,7 @@
             min-width: 120px;
         }
         .table-card-secondary {
-            color: var(--text-light);
+            color: var(--muted-color);
             font-size: 0.93rem;
             display: -webkit-box;
             -webkit-line-clamp: 2;
@@ -4068,7 +4071,7 @@
         }
         .table-card-detail-label {
             font-weight: 600;
-            color: var(--text-light);
+            color: var(--muted-color);
             flex: 0 0 40%;
         }
         .table-card-detail-value {
@@ -7990,5 +7993,89 @@
                 flex: 1 1 100%;
                 width: 100%;
             }
+        }
+
+        /* ====== Configurações do App (white-label) ====== */
+        .config-form { padding: 4px 2px 8px; }
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 24px;
+            align-items: start;
+        }
+        .config-fields { display: flex; flex-direction: column; gap: 14px; }
+        .config-color-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .config-color-row input[type="color"] {
+            width: 48px;
+            height: 42px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--surface-color);
+            cursor: pointer;
+            padding: 2px;
+        }
+        .config-color-row .form-control { max-width: 140px; text-transform: uppercase; }
+        .config-preview {
+            position: sticky;
+            top: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            background: color-mix(in srgb, var(--surface-color) 92%, var(--bg-color) 8%);
+            padding: 18px;
+        }
+        .config-preview-title {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted-color);
+            font-weight: 700;
+            margin-bottom: 14px;
+        }
+        .config-preview-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            text-align: center;
+            padding: 18px;
+            border-radius: var(--radius-md);
+            background: var(--surface-color);
+            box-shadow: var(--shadow-sm);
+        }
+        .config-preview-logo,
+        .config-preview-logo-empty {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            object-fit: cover;
+        }
+        .config-preview-logo-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: var(--primary-color);
+            background: color-mix(in srgb, var(--primary-color) 12%, var(--surface-color) 88%);
+        }
+        .config-preview-name { font-size: 1.2rem; font-weight: 800; color: var(--dark-color); }
+        .config-preview-hospital { font-size: 0.82rem; color: var(--muted-color); }
+        .config-preview-btn {
+            margin-top: 6px;
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 10px 18px;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            background: var(--primary-color);
+            cursor: default;
+        }
+        @media (max-width: 860px) {
+            .config-grid { grid-template-columns: 1fr; }
+            .config-preview { position: static; }
         }
     </style>
