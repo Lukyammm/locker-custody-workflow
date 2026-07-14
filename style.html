@@ -166,7 +166,7 @@
             --modal-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
             --modal-radius: 20px;
             --modal-overlay: color-mix(in srgb, var(--color-neutral-900) 38%, transparent);
-            --modal-overlay-blur: blur(14px);
+            --modal-overlay-blur: blur(8px);
             --modal-header-bg: linear-gradient(180deg, color-mix(in srgb, var(--surface-color) 96%, #ffffff 4%), var(--surface-color));
             --modal-footer-bg: color-mix(in srgb, var(--surface-color) 92%, var(--light-color) 8%);
             --modal-divider: color-mix(in srgb, var(--dark-color) 10%, transparent);
@@ -195,7 +195,7 @@
             --table-row-border: color-mix(in srgb, var(--dark-color) 6%, transparent);
 
             /* Glass tokens */
-            --glass-blur: blur(14px);
+            --glass-blur: blur(8px);
             --glass-bg: color-mix(in srgb, var(--surface-color) 80%, transparent);
             --glass-bg-strong: color-mix(in srgb, var(--surface-color) 90%, transparent);
             --glass-border: color-mix(in srgb, var(--color-neutral-0) 35%, transparent);
@@ -255,7 +255,7 @@
             --modal-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
             --modal-radius: 20px;
             --modal-overlay: color-mix(in srgb, var(--color-neutral-900) 45%, transparent);
-            --modal-overlay-blur: blur(12px);
+            --modal-overlay-blur: blur(8px);
             --modal-header-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 94%, var(--color-neutral-900) 6%), var(--color-surface));
             --modal-footer-bg: color-mix(in srgb, var(--color-surface) 88%, var(--color-neutral-900) 12%);
             --modal-divider: color-mix(in srgb, var(--color-neutral-900) 18%, transparent);
@@ -269,7 +269,7 @@
             --login-feedback-bg: color-mix(in srgb, var(--color-background) 70%, transparent);
             --login-logo-filter: none;
 
-            --glass-blur: blur(16px);
+            --glass-blur: blur(10px);
             --glass-bg: color-mix(in srgb, var(--color-surface) 70%, transparent);
             --glass-bg-strong: color-mix(in srgb, var(--color-surface) 82%, transparent);
             --glass-border: color-mix(in srgb, var(--color-neutral-900) 18%, transparent);
@@ -759,7 +759,7 @@
             padding: 12px 20px;
             color: white;
             text-decoration: none;
-            transition: all 0.3s;
+            transition: background-color 0.3s, color 0.3s, border-left-color 0.3s;
             border-left: 4px solid transparent;
             text-align: left;
             position: relative;
@@ -826,7 +826,7 @@
             flex: 1;
             margin-left: var(--sidebar-width);
             padding: 20px;
-            transition: all 0.3s;
+            transition: margin-left 0.3s;
             overflow-x: hidden;
         }
         /* Header */
@@ -854,7 +854,7 @@
             color: var(--dark-color);
             cursor: pointer;
             box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
         }
         [data-theme="dark"] .sidebar-toggle {
             background: color-mix(in srgb, var(--color-neutral-900) 18%, var(--color-surface) 82%);
@@ -1700,7 +1700,7 @@
             font-weight: 700;
             cursor: pointer;
             box-shadow: 0 12px 26px color-mix(in srgb, var(--primary-color) 16%, var(--shadow-color) 84%);
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
         }
         .upload-button i {
             color: color-mix(in srgb, var(--primary-color) 70%, var(--dark-color) 30%);
@@ -2345,7 +2345,7 @@
             flex: 1 1 280px;
             max-width: 420px;
             min-width: 240px;
-            transition: all 0.25s ease;
+            transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
         }
         .filter-search i {
             color: var(--muted-color);
@@ -2378,7 +2378,7 @@
             color: color-mix(in srgb, var(--primary-color) 50%, var(--dark-color) 50%);
             box-shadow: 0 10px 22px color-mix(in srgb, var(--primary-color) 12%, var(--shadow-color) 88%);
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
             opacity: 0;
             pointer-events: none;
         }
@@ -2429,7 +2429,7 @@
             border-radius: var(--radius-md);
             box-shadow: var(--shadow-sm);
             padding: 16px 16px 14px;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease, opacity 0.3s ease;
             cursor: pointer;
             border-left: 0;
             position: relative;
@@ -2437,7 +2437,8 @@
             flex-direction: column;
             gap: 10px;
             border: 1px solid color-mix(in srgb, var(--primary-color) 8%, var(--border-color) 92%);
-            backdrop-filter: blur(8px);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
         }
         .armario-card.skeleton {
             position: relative;
@@ -2598,7 +2599,8 @@
             border-radius: 22px !important;
             padding: 26px !important;
             box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
-            backdrop-filter: blur(12px);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
         }
         .swal2-premium-title {
             font-size: 1.4rem !important;
@@ -4380,7 +4382,7 @@
             color: var(--primary-dark);
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
             box-shadow: 0 6px 14px rgba(11, 19, 36, 0.05);
         }
         [data-theme="dark"] .wizard-check-button {
@@ -5087,7 +5089,7 @@
             border-radius: 14px;
             font-weight: 700;
             font-size: 1rem;
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
             text-align: center;
             display: inline-flex;
             align-items: center;
@@ -5500,7 +5502,7 @@
             border: 1px dashed color-mix(in srgb, var(--border-color) 60%, transparent);
             background: color-mix(in srgb, var(--surface-color) 92%, white 8%);
             color: var(--text-color);
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
         }
         .mov-item-actions .icon-btn:hover,
         .mov-item-actions .icon-btn:focus-visible {
@@ -6948,6 +6950,19 @@
             .btn-contingencia {
                 flex: 1 1 100%;
                 width: 100%;
+            }
+        }
+
+        /* Reduz carga de renderizacao para quem prefere menos movimento:
+           praticamente elimina animacoes e transicoes (menos trabalho de CPU/GPU). */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
             }
         }
     </style>
