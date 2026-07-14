@@ -2394,12 +2394,19 @@
             });
         }
         // Inicialização
+        function executarInicializacaoSegura(descricao, acao) {
+            try {
+                acao();
+            } catch (erro) {
+                console.error(`Erro ao executar inicialização (${descricao}):`, erro);
+            }
+        }
         document.addEventListener('DOMContentLoaded', function() {
-            inicializarTema();
-            atualizarOpcoesSetorTermo();
-            atualizarResponsavelMovimentacaoInfo();
-            modoOffline.inicializar();
-            inicializarLogin();
+            executarInicializacaoSegura('inicializarTema', inicializarTema);
+            executarInicializacaoSegura('atualizarOpcoesSetorTermo', atualizarOpcoesSetorTermo);
+            executarInicializacaoSegura('atualizarResponsavelMovimentacaoInfo', atualizarResponsavelMovimentacaoInfo);
+            executarInicializacaoSegura('modoOffline.inicializar', () => modoOffline.inicializar());
+            executarInicializacaoSegura('inicializarLogin', inicializarLogin);
         });
         function aguardar(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -2680,36 +2687,49 @@
                 return;
             }
             loginInicializado = true;
-            const sessaoRestaurada = restaurarSessaoUsuario();
-            if (sessaoRestaurada && !estado.autenticado) {
-                const usuarioRestaurado = {
-                    ...sessaoRestaurada
-                };
-                usuarioRestaurado.perfil = (usuarioRestaurado.perfil || 'usuario').toString().trim().toLowerCase();
-                usuarioRestaurado.unidades = normalizarListaDeUnidades(usuarioRestaurado.unidades);
-                estado.usuarioAutenticado = usuarioRestaurado;
-                estado.autenticado = true;
-                persistirSessaoAtual();
-                if (elementos.loginContainer) {
-                    elementos.loginContainer.classList.add('hidden');
-                }
-                if (elementos.appShell) {
-                    elementos.appShell.classList.remove('hidden');
-                }
-                atualizarCabecalhoUsuario();
-                aplicarPermissoesMenu();
-                inicializarAplicacao().catch(erro => {
-                    console.error('Erro ao inicializar aplicação após restaurar sessão:', erro);
-                    limparSessaoUsuario();
-                    estado.autenticado = false;
-                    if (elementos.appShell) {
-                        elementos.appShell.classList.add('hidden');
-                    }
+            try {
+                const sessaoRestaurada = restaurarSessaoUsuario();
+                if (sessaoRestaurada && !estado.autenticado) {
+                    const usuarioRestaurado = {
+                        ...sessaoRestaurada
+                    };
+                    usuarioRestaurado.perfil = (usuarioRestaurado.perfil || 'usuario').toString().trim().toLowerCase();
+                    usuarioRestaurado.unidades = normalizarListaDeUnidades(usuarioRestaurado.unidades);
+                    estado.usuarioAutenticado = usuarioRestaurado;
+                    estado.autenticado = true;
+                    persistirSessaoAtual();
                     if (elementos.loginContainer) {
-                        elementos.loginContainer.classList.remove('hidden');
+                        elementos.loginContainer.classList.add('hidden');
                     }
-                    atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
-                });
+                    if (elementos.appShell) {
+                        elementos.appShell.classList.remove('hidden');
+                    }
+                    atualizarCabecalhoUsuario();
+                    aplicarPermissoesMenu();
+                    inicializarAplicacao().catch(erro => {
+                        console.error('Erro ao inicializar aplicação após restaurar sessão:', erro);
+                        limparSessaoUsuario();
+                        estado.autenticado = false;
+                        if (elementos.appShell) {
+                            elementos.appShell.classList.add('hidden');
+                        }
+                        if (elementos.loginContainer) {
+                            elementos.loginContainer.classList.remove('hidden');
+                        }
+                        atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
+                    });
+                }
+            } catch (erro) {
+                console.error('Erro ao restaurar sessão do usuário:', erro);
+                limparSessaoUsuario();
+                estado.autenticado = false;
+                if (elementos.appShell) {
+                    elementos.appShell.classList.add('hidden');
+                }
+                if (elementos.loginContainer) {
+                    elementos.loginContainer.classList.remove('hidden');
+                }
+                atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
             }
             if (!elementos.loginForm) {
                 return;
