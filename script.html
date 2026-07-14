@@ -9316,12 +9316,25 @@
                     console.error('Erro ao atualizar tabelas localmente após aplicar termo:', erro);
                 });
             }
-            const promessaSalvamento = callGoogleScript('salvarTermoCompleto', dadosTermo);
-            let resultado;
-            try {
-                resultado = await promessaSalvamento;
-            } catch (erroSalvar) {
-                console.error('Erro ao salvar termo:', erroSalvar);
+            // ── Agilidade: fecha o modal e atualiza o front IMEDIATAMENTE ─────────
+            // O estado local otimista já foi aplicado acima. Espelhamos aqui a
+            // percepção de agilidade do fluxo de encerramento: o usuário não espera
+            // o backend — o salvamento segue em segundo plano e o estado só é
+            // revertido caso a persistência realmente falhe.
+            fecharTermoModal();
+            mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
+
+            const reverterTermoLocal = () => {
+                if (armarioIdLocal) {
+                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
+                    carregarDadosTabelas({ recarregarArmarios: false }).catch(() => {});
+                }
+            };
+
+            // Quando o backend não confirma na primeira resposta, checamos se o termo
+            // persistiu mesmo assim (resposta perdida por rede lenta é comum no Apps
+            // Script) antes de reverter — evita desfazer uma operação que deu certo.
+            const confirmarOuReverter = async (resultado) => {
                 const persistiu = await confirmarPersistenciaArmario({
                     idInterface: armarioIdLocal,
                     idPlanilha: identificadores?.idPlanilha || '',
@@ -9330,42 +9343,31 @@
                 });
                 if (persistiu) {
                     sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
-                    mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
                     return;
                 }
-                mostrarErro('Não foi possível registrar o termo agora. Tente novamente.');
-                if (armarioIdLocal) {
-                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
+                reverterTermoLocal();
+                if (resultado && !resultado._erroNotificado) {
+                    notificarErroPadrao(resultado);
+                } else if (!resultado) {
+                    mostrarErro(`Não foi possível concluir o termo do armário ${identificadores?.numeroArmario || ''}. Atualize a lista e tente novamente.`.trim());
                 }
-                return;
-            }
-            if (resultado?.success) {
-                fecharTermoModal();
-                mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
-                atualizarDadosPosOperacao('Atualizando informações do armário...', null, {
-                    modoRapido: true,
-                    timeoutRapido: 600
-                }).catch(erroAtualizacao => {
-                    console.error('Erro ao atualizar dados após salvar termo:', erroAtualizacao);
+            };
+
+            // Salvamento em segundo plano. Sem conexão, callGoogleScript enfileira a
+            // operação automaticamente e retorna success (_offline): o termo é
+            // sincronizado assim que a internet voltar, sem travar a interface.
+            callGoogleScript('salvarTermoCompleto', dadosTermo)
+                .then(resultado => {
+                    if (resultado?.success) {
+                        sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                        return;
+                    }
+                    return confirmarOuReverter(resultado);
+                })
+                .catch(erroSalvar => {
+                    console.error('Erro ao salvar termo em segundo plano:', erroSalvar);
+                    return confirmarOuReverter(null);
                 });
-            } else {
-                const persistiu = await confirmarPersistenciaArmario({
-                    idInterface: armarioIdLocal,
-                    idPlanilha: identificadores?.idPlanilha || '',
-                    tipo: 'acompanhante',
-                    validarTermo: true
-                });
-                if (persistiu) {
-                    fecharTermoModal();
-                    sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
-                    mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
-                    return;
-                }
-                notificarErroPadrao(resultado);
-                if (armarioIdLocal) {
-                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
-                }
-            }
         }
         function fecharTermoModal() {
             if (elementos.termoModal.style.display === 'flex') {
