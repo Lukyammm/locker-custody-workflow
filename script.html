@@ -2696,10 +2696,23 @@
                 if (elementos.appShell) {
                     elementos.appShell.classList.remove('hidden');
                 }
-                atualizarCabecalhoUsuario();
-                aplicarPermissoesMenu();
-                inicializarAplicacao().catch(erro => {
-                    console.error('Erro ao inicializar aplicação após restaurar sessão:', erro);
+                try {
+                    atualizarCabecalhoUsuario();
+                    aplicarPermissoesMenu();
+                    inicializarAplicacao().catch(erro => {
+                        console.error('Erro ao inicializar aplicação após restaurar sessão:', erro);
+                        limparSessaoUsuario();
+                        estado.autenticado = false;
+                        if (elementos.appShell) {
+                            elementos.appShell.classList.add('hidden');
+                        }
+                        if (elementos.loginContainer) {
+                            elementos.loginContainer.classList.remove('hidden');
+                        }
+                        atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
+                    });
+                } catch (erro) {
+                    console.error('Erro ao restaurar sessão do usuário:', erro);
                     limparSessaoUsuario();
                     estado.autenticado = false;
                     if (elementos.appShell) {
@@ -2709,7 +2722,7 @@
                         elementos.loginContainer.classList.remove('hidden');
                     }
                     atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
-                });
+                }
             }
             if (!elementos.loginForm) {
                 return;
