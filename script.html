@@ -9025,56 +9025,62 @@
                     console.error('Erro ao atualizar tabelas localmente após aplicar termo:', erro);
                 });
             }
-            const promessaSalvamento = callGoogleScript('salvarTermoCompleto', dadosTermo);
-            let resultado;
-            try {
-                resultado = await promessaSalvamento;
-            } catch (erroSalvar) {
-                console.error('Erro ao salvar termo:', erroSalvar);
-                const persistiu = await confirmarPersistenciaArmario({
-                    idInterface: armarioIdLocal,
-                    idPlanilha: identificadores?.idPlanilha || '',
-                    tipo: 'acompanhante',
-                    validarTermo: true
-                });
-                if (persistiu) {
-                    sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
-                    mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
-                    return;
-                }
-                mostrarErro('Não foi possível registrar o termo agora. Tente novamente.');
+            // O front já foi atualizado de forma otimista acima (atualizarArmarioLocal +
+            // atualizarDashboardImediato). Assim como no encerramento de movimentação,
+            // liberamos o usuário imediatamente — fechamos o modal e confirmamos o sucesso —
+            // e salvamos o termo em segundo plano (fire-and-forget), sem travar aguardando o
+            // backend. Todos os dados já estão capturados em `dadosTermo`, então é seguro.
+            fecharTermoModal();
+            mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
+
+            // Reverte a atualização otimista e avisa o usuário caso o registro não persista.
+            const reverterReservaLocal = () => {
                 if (armarioIdLocal) {
                     restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
                 }
-                return;
-            }
-            if (resultado?.success) {
-                fecharTermoModal();
-                mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
-                atualizarDadosPosOperacao('Atualizando informações do armário...', null, {
-                    modoRapido: true,
-                    timeoutRapido: 600
-                }).catch(erroAtualizacao => {
-                    console.error('Erro ao atualizar dados após salvar termo:', erroAtualizacao);
+            };
+
+            callGoogleScript('salvarTermoCompleto', dadosTermo)
+                .then(async resultado => {
+                    if (resultado?.success) {
+                        sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                        return;
+                    }
+                    // Backend respondeu sem sucesso: confirma se o armário persistiu mesmo assim.
+                    const persistiu = await confirmarPersistenciaArmario({
+                        idInterface: armarioIdLocal,
+                        idPlanilha: identificadores?.idPlanilha || '',
+                        tipo: 'acompanhante',
+                        validarTermo: true
+                    });
+                    if (persistiu) {
+                        sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                        return;
+                    }
+                    notificarErroPadrao(resultado);
+                    reverterReservaLocal();
+                })
+                .catch(async erroSalvar => {
+                    console.error('Erro ao salvar termo em segundo plano:', erroSalvar);
+                    // Falha de rede/execução: confirma se persistiu antes de reverter.
+                    let persistiu = false;
+                    try {
+                        persistiu = await confirmarPersistenciaArmario({
+                            idInterface: armarioIdLocal,
+                            idPlanilha: identificadores?.idPlanilha || '',
+                            tipo: 'acompanhante',
+                            validarTermo: true
+                        });
+                    } catch (erroConfirmacao) {
+                        console.error('Erro ao confirmar persistência da reserva em segundo plano:', erroConfirmacao);
+                    }
+                    if (persistiu) {
+                        sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                        return;
+                    }
+                    mostrarErro('Não foi possível registrar o termo. Verifique a conexão e tente novamente.');
+                    reverterReservaLocal();
                 });
-            } else {
-                const persistiu = await confirmarPersistenciaArmario({
-                    idInterface: armarioIdLocal,
-                    idPlanilha: identificadores?.idPlanilha || '',
-                    tipo: 'acompanhante',
-                    validarTermo: true
-                });
-                if (persistiu) {
-                    fecharTermoModal();
-                    sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
-                    mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
-                    return;
-                }
-                notificarErroPadrao(resultado);
-                if (armarioIdLocal) {
-                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
-                }
-            }
         }
         function fecharTermoModal() {
             if (elementos.termoModal.style.display === 'flex') {
