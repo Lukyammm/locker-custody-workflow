@@ -488,51 +488,41 @@
             if (storage) {
                 try {
                     const temaSalvo = storage.getItem(STORAGE_KEYS.tema);
-                    if (temaSalvo === 'dark' || temaSalvo === 'light' || temaSalvo === 'pink' || temaSalvo === 'copa') {
+                    if (temaSalvo === 'dark' || temaSalvo === 'light') {
                         return temaSalvo;
                     }
                 } catch (erro) {
                     console.warn('Falha ao ler tema salvo:', erro);
                 }
             }
-            // Tema temporário da Copa é o padrão ao abrir (sem preferência salva).
-            return 'copa';
+            return 'light';
         }
         function obterProximoTema(temaAtual) {
-            const ordem = ['copa', 'light', 'dark', 'pink'];
-            const indiceAtual = ordem.indexOf(temaAtual);
-            if (indiceAtual === -1) return 'light';
-            return ordem[(indiceAtual + 1) % ordem.length];
+            return temaAtual === 'dark' ? 'light' : 'dark';
         }
         function atualizarBotaoTema(tema) {
             const botaoTema = document.getElementById('theme-toggle');
             if (!botaoTema) return;
             const icone = botaoTema.querySelector('i');
-            const temasValidos = ['dark', 'pink', 'copa'];
-            const temaAtual = temasValidos.indexOf(tema) !== -1 ? tema : 'light';
+            const temaAtual = tema === 'dark' ? 'dark' : 'light';
             const proximoTema = obterProximoTema(temaAtual);
             const labelMap = {
-                copa: 'Ativar tema claro',
                 light: 'Ativar tema escuro',
-                dark: 'Ativar tema rosa',
-                pink: 'Ativar tema da Copa'
+                dark: 'Ativar tema claro'
             };
             const iconMap = {
-                copa: 'fas fa-futbol',
                 light: 'fas fa-sun',
-                dark: 'fas fa-moon',
-                pink: 'fas fa-heart'
+                dark: 'fas fa-moon'
             };
             if (icone) {
-                icone.className = iconMap[temaAtual] || 'fas fa-moon';
+                icone.className = iconMap[temaAtual] || 'fas fa-sun';
             }
             botaoTema.setAttribute('aria-label', labelMap[temaAtual] || 'Alternar tema');
             botaoTema.setAttribute('aria-pressed', temaAtual !== 'light' ? 'true' : 'false');
             botaoTema.dataset.nextTheme = proximoTema;
         }
         function aplicarTema(tema, salvarPreferencia = true) {
-            const temasValidos = ['dark', 'pink', 'copa'];
-            const temaFinal = temasValidos.indexOf(tema) !== -1 ? tema : 'light';
+            const temaFinal = tema === 'dark' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', temaFinal);
             atualizarBotaoTema(temaFinal);
             if (!salvarPreferencia) return;
@@ -545,9 +535,7 @@
             }
         }
         function inicializarTema() {
-            // Tema temporário da Copa é forçado na abertura, ignorando qualquer
-            // preferência salva no cache. O usuário ainda pode alternar na sessão.
-            aplicarTema('copa', true);
+            aplicarTema(obterTemaPreferido(), false);
             const botaoTema = document.getElementById('theme-toggle');
             if (botaoTema) {
                 botaoTema.addEventListener('click', () => {
