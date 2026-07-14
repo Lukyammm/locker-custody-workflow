@@ -136,6 +136,8 @@
         ]);
 
         // Ações que NÃO devem ser enfileiradas offline — dependem da resposta imediata
+        // (dados gerados pelo servidor, como IDs/numeração, que a resposta sintética
+        // offline não tem, ou que exigem confirmação na hora)
         const acoesNaoEnfileriaveis = new Set([
             'autenticarUsuario',
             'verificarInicializacao',
@@ -143,7 +145,9 @@
             'gerarTermoPDFTemporario',
             'buscarPacienteBaseVitae',
             'executarBackupSistema',
-            'excluirArquivoTemporario'
+            'excluirArquivoTemporario',
+            'cadastrarArmarioFisico',
+            'cadastrarUnidade'
         ]);
 
         const modoOffline = {
@@ -347,6 +351,14 @@
 
                 if (descartados.length > 0) {
                     console.warn('[offline] operações descartadas após exceder tentativas:', descartados.map(i => i.action));
+                    if (typeof mostrarErro === 'function') {
+                        const quantidade = descartados.length;
+                        mostrarErro(
+                            quantidade === 1
+                                ? '1 operação feita offline não pôde ser sincronizada e foi perdida. Verifique e refaça se necessário.'
+                                : `${quantidade} operações feitas offline não puderam ser sincronizadas e foram perdidas. Verifique e refaça se necessário.`
+                        );
+                    }
                 }
                 if (sucessos > 0 && this._filaSincronizacao.length === 0) {
                     mostrarSucesso('Dados sincronizados com sucesso!');
@@ -11209,6 +11221,15 @@
                         usuarioResponsavel,
                         tipo: identificadores?.tipo || ''
                     });
+
+                    if (resultadoUnificado?._offline) {
+                        // Sem conexão: callGoogleScript já enfileirou a operação e avisou o
+                        // usuário. Não há finalizacao/liberacao ainda (só existirão após o
+                        // sync), então não dá pra validar sub-status — e não devemos reverter
+                        // o estado local otimista, que já reflete o armário liberado.
+                        liberacaoConfirmada = true;
+                        return;
+                    }
 
                     const finalizacao = resultadoUnificado?.finalizacao || {};
                     const liberacao = resultadoUnificado?.liberacao || {};
