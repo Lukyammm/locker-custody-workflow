@@ -3,6 +3,9 @@
         // window.SCRIPT_URL (ver doGet/index.html). Reflete sempre a implantação
         // atual vinculada à planilha — não é preciso escrever nenhum link aqui.
         const SCRIPT_URL = (typeof window !== 'undefined' && window.SCRIPT_URL) || '';
+        if (!SCRIPT_URL) {
+            console.warn('SCRIPT_URL vazio: window.SCRIPT_URL não foi definido pelo servidor. As chamadas via fetch falharão e o app dependerá do fallback google.script.run.');
+        }
         // Estado da aplicação
         function criarEstadoLiberacaoInicial() {
             return {
@@ -740,8 +743,6 @@
             movTipo: document.getElementById('mov-tipo'),
             movTabs: document.querySelectorAll('.mov-tab'),
             movTabPanels: document.querySelectorAll('.mov-tab-panel'),
-            movTabPlaceholder: document.getElementById('mov-tab-placeholder'),
-            movFlowContent: document.getElementById('mov-flow-content'),
             movItensList: document.getElementById('mov-itens-list'),
             movItensLabel: document.getElementById('mov-itens-label'),
             movItensHelper: document.getElementById('mov-itens-helper'),
@@ -756,7 +757,6 @@
             movObservacao: document.getElementById('mov-observacao'),
             movObservacaoLabel: document.getElementById('mov-observacao-label'),
             movObservacaoGroup: document.getElementById('mov-observacao-group'),
-            movResponsavelInfo: document.getElementById('mov-responsavel-info'),
             movSignatureCanvas: document.getElementById('mov-signature-canvas'),
             movSignatureClear: document.getElementById('mov-signature-clear'),
             movSignatureField: document.getElementById('mov-signature-field'),
@@ -1698,19 +1698,6 @@
             }
             return partes.join(' - ') || nome || matricula || login;
         }
-        function atualizarResponsavelMovimentacaoInfo() {
-            if (!elementos.movResponsavelInfo) {
-                return;
-            }
-            const descricao = obterDescricaoResponsavelAtual();
-            if (descricao) {
-                elementos.movResponsavelInfo.textContent = descricao;
-                elementos.movResponsavelInfo.classList.remove('is-warning');
-            } else {
-                elementos.movResponsavelInfo.textContent = 'Faça login para registrar movimentações.';
-                elementos.movResponsavelInfo.classList.add('is-warning');
-            }
-        }
         function perfilAtualEhAdmin() {
             const usuario = obterUsuarioAutenticado();
             return usuario ? normalizarTexto(usuario.perfil) === 'admin' : false;
@@ -1979,7 +1966,6 @@
                     elementos.headerUserGreetingRole.textContent = 'Visitante';
                 }
                 atualizarTurnoCabecalho();
-                atualizarResponsavelMovimentacaoInfo();
                 return;
             }
             const nomeLimpo = (usuario.nome || 'Usuário').toString().trim();
@@ -2001,7 +1987,6 @@
                 elementos.headerUserAvatar.textContent = gerarIniciais(nomeLimpo);
             }
             sincronizarSelecaoAvatar();
-            atualizarResponsavelMovimentacaoInfo();
         }
         function aplicarPermissoesMenu() {
             if (!elementos.menuLinks) return;
@@ -2157,7 +2142,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             inicializarTema();
             atualizarOpcoesSetorTermo();
-            atualizarResponsavelMovimentacaoInfo();
             inicializarLogin();
         });
         function aguardar(ms) {
@@ -9838,8 +9822,6 @@
                     tab.setAttribute('aria-selected', 'false');
                 });
                 elementos.movTabPanels?.forEach(painel => painel.classList.remove('active'));
-                elementos.movTabPlaceholder?.classList.remove('hidden');
-                elementos.movFlowContent?.classList.add('hidden');
                 if (elementos.movItensList) {
                     elementos.movItensList.innerHTML = '';
                 }
@@ -9858,8 +9840,6 @@
             elementos.movTabPanels?.forEach(painel => {
                 painel.classList.toggle('active', painel.dataset.movPanel === tipoNormalizado);
             });
-            elementos.movTabPlaceholder?.classList.add('hidden');
-            elementos.movFlowContent?.classList.remove('hidden');
             atualizarContextoMovimentacao(tipoNormalizado);
             if (elementos.movObservacao) {
                 elementos.movObservacao.value = '';
@@ -10157,7 +10137,6 @@
             limparItensMovimentacaoFormulario();
             limparAssinaturaMovimentacao(true);
             movEntradaDescricaoUltimoValor = '';
-            atualizarResponsavelMovimentacaoInfo();
             const padraoLocal = obterDataHoraLocalPadrao();
             elementos.movData.value = padraoLocal.data;
             elementos.movHora.value = padraoLocal.hora;
