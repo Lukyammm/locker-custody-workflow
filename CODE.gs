@@ -3353,18 +3353,8 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
       var statusHistorico = historicoSheet.getRange(2, 10, totalLinhasHistorico, 1).getValues().flat();
       var linhaHistorico = -1;
 
-      // O histórico é aberto com status 'EM USO' (uso normal) ou 'CONTINGENCIA'
-      // (fluxo de acompanhante). A liberação precisa fechar qualquer um dos dois.
-      // A comparação usa valores normalizados porque a planilha pode devolver o
-      // número do armário como valor numérico enquanto numeroArmario é string.
-      var numeroArmarioComparacao = normalizarNumeroArmario(numeroArmario);
-      var statusHistoricoAbertos = ['em uso', 'contingencia'];
-
       for (var i = numerosHistorico.length - 1; i >= 0; i--) {
-        var numeroHistoricoComparacao = normalizarNumeroArmario(numerosHistorico[i]);
-        var statusHistoricoNormalizado = normalizarTextoBasico(statusHistorico[i]);
-        if (numeroHistoricoComparacao === numeroArmarioComparacao &&
-            statusHistoricoAbertos.indexOf(statusHistoricoNormalizado) !== -1) {
+        if (numerosHistorico[i] === numeroArmario && statusHistorico[i] === 'EM USO') {
           linhaHistorico = i + 2;
           break;
         }
