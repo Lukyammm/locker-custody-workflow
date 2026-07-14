@@ -125,252 +125,6 @@
         const cacheChamadasLeitura = new Map();
         const acoesLeituraComCache = new Set(['getArmarios', 'getUnidades', 'getSetores', 'getUsuarios', 'getNotificacoes']);
 
-        // ── Módulo Offline ────────────────────────────────────────────────────────
-        const OFFLINE_CACHE_KEY = 'locknac_offline_cache';
-        const OFFLINE_QUEUE_KEY = 'locknac_offline_queue';
-        const OFFLINE_CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 horas
-
-        const acoesLeituraOffline = new Set([
-            'getArmarios', 'getUnidades', 'getSetores', 'getUsuarios',
-            'getNotificacoes', 'getEstatisticas', 'getConfig'
-        ]);
-
-        // Ações que NÃO devem ser enfileiradas offline — dependem da resposta imediata
-        // (dados gerados pelo servidor, como IDs/numeração, que a resposta sintética
-        // offline não tem, ou que exigem confirmação na hora)
-        const acoesNaoEnfileriaveis = new Set([
-            'autenticarUsuario',
-            'verificarInicializacao',
-            'inicializarPlanilha',
-            'gerarTermoPDFTemporario',
-            'buscarPacienteBaseVitae',
-            'executarBackupSistema',
-            'excluirArquivoTemporario',
-            'cadastrarArmarioFisico',
-            'cadastrarUnidade'
-        ]);
-
-        const modoOffline = {
-            _online: navigator.onLine,
-            _sincronizando: false,
-            _filaSincronizacao: [],
-            _indicador: null,
-            _tentativaSincronizacaoId: null,
-
-            get online() { return this._online; },
-
-            inicializar() {
-                this._filaSincronizacao = this._carregarFila();
-                window.addEventListener('online', () => this._aoConectar());
-                window.addEventListener('offline', () => this._aoDesconectar());
-                this._online = navigator.onLine;
-                this._criarIndicador();
-                this._atualizarIndicador();
-                if (this._filaSincronizacao.length > 0 && this._online) {
-                    setTimeout(() => this.sincronizar(), 2000);
-                }
-            },
-
-            _criarIndicador() {
-                const existente = document.getElementById('offline-status-bar');
-                if (existente) { this._indicador = existente; return; }
-                const bar = document.createElement('div');
-                bar.id = 'offline-status-bar';
-                bar.setAttribute('role', 'status');
-                bar.setAttribute('aria-live', 'polite');
-                bar.innerHTML = `
-                    <span id="offline-status-icon"><i class="fas fa-triangle-exclamation"></i></span>
-                    <span id="offline-status-text"></span>
-                    <button id="offline-sync-btn" type="button" title="Tentar sincronizar agora" style="display:none">
-                        <i class="fas fa-rotate"></i>
-                    </button>
-                `;
-                document.body.appendChild(bar);
-                const btn = document.getElementById('offline-sync-btn');
-                if (btn) {
-                    btn.addEventListener('click', () => this.sincronizar());
-                }
-                this._indicador = bar;
-            },
-
-            _atualizarIndicador() {
-                const bar = this._indicador || document.getElementById('offline-status-bar');
-                if (!bar) return;
-                const iconEl = document.getElementById('offline-status-icon');
-                const textEl = document.getElementById('offline-status-text');
-                const btnEl = document.getElementById('offline-sync-btn');
-                const pendentes = this._filaSincronizacao.length;
-
-                let visivel = true;
-                if (!this._online) {
-                    bar.className = 'offline-bar offline-bar--offline';
-                    if (iconEl) iconEl.innerHTML = '<i class="fas fa-triangle-exclamation"></i>';
-                    if (textEl) textEl.textContent = pendentes > 0
-                        ? `Sem conexão — ${pendentes} operaç${pendentes === 1 ? 'ão pendente' : 'ões pendentes'}`
-                        : 'Sem conexão — dados em cache';
-                    if (btnEl) btnEl.style.display = 'none';
-                    bar.style.display = 'flex';
-                } else if (this._sincronizando) {
-                    bar.className = 'offline-bar offline-bar--syncing';
-                    if (iconEl) iconEl.innerHTML = '<i class="fas fa-rotate fa-spin"></i>';
-                    if (textEl) textEl.textContent = 'Sincronizando...';
-                    if (btnEl) btnEl.style.display = 'none';
-                    bar.style.display = 'flex';
-                } else if (pendentes > 0) {
-                    bar.className = 'offline-bar offline-bar--pending';
-                    if (iconEl) iconEl.innerHTML = '<i class="fas fa-clock-rotate-left"></i>';
-                    if (textEl) textEl.textContent = `${pendentes} operaç${pendentes === 1 ? 'ão' : 'ões'} aguardando sincronização`;
-                    if (btnEl) btnEl.style.display = '';
-                    bar.style.display = 'flex';
-                } else {
-                    bar.style.display = 'none';
-                    visivel = false;
-                }
-                document.body.classList.toggle('offline-bar-visible', visivel);
-            },
-
-            _aoConectar() {
-                this._online = true;
-                this._atualizarIndicador();
-                if (this._filaSincronizacao.length > 0) {
-                    clearTimeout(this._tentativaSincronizacaoId);
-                    this._tentativaSincronizacaoId = setTimeout(() => this.sincronizar(), 1500);
-                }
-                limparCacheLeiturasCliente();
-            },
-
-            _aoDesconectar() {
-                this._online = false;
-                this._atualizarIndicador();
-            },
-
-            salvarCache(action, chave, resposta) {
-                try {
-                    const storage = obterArmazenamentoLocal();
-                    if (!storage) return;
-                    const cacheAtual = JSON.parse(storage.getItem(OFFLINE_CACHE_KEY) || '{}');
-                    cacheAtual[chave] = { resposta, action, salvoEm: Date.now() };
-                    storage.setItem(OFFLINE_CACHE_KEY, JSON.stringify(cacheAtual));
-                } catch (e) {
-                    console.warn('[offline] falha ao salvar cache:', e);
-                }
-            },
-
-            lerCache(chave) {
-                const storage = obterArmazenamentoLocal();
-                if (!storage) return null;
-                let cacheAtual;
-                try {
-                    cacheAtual = JSON.parse(storage.getItem(OFFLINE_CACHE_KEY) || '{}');
-                } catch (e) {
-                    // JSON corrompido — descarta tudo para não bloquear uso futuro
-                    try { storage.removeItem(OFFLINE_CACHE_KEY); } catch (_) {}
-                    return null;
-                }
-                try {
-                    const entrada = cacheAtual[chave];
-                    if (!entrada) return null;
-                    if (Date.now() - entrada.salvoEm > OFFLINE_CACHE_TTL_MS) {
-                        delete cacheAtual[chave];
-                        storage.setItem(OFFLINE_CACHE_KEY, JSON.stringify(cacheAtual));
-                        return null;
-                    }
-                    return { ...entrada.resposta, _doCacheOffline: true };
-                } catch (e) {
-                    return null;
-                }
-            },
-
-            enfileirar(action, payload) {
-                const item = {
-                    id: Date.now() + '-' + Math.random().toString(36).slice(2),
-                    action,
-                    payload,
-                    criadoEm: Date.now(),
-                    tentativas: 0
-                };
-                this._filaSincronizacao.push(item);
-                this._salvarFila();
-                this._atualizarIndicador();
-                return item.id;
-            },
-
-            _salvarFila() {
-                try {
-                    const storage = obterArmazenamentoLocal();
-                    if (!storage) return;
-                    storage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(this._filaSincronizacao));
-                } catch (e) {
-                    console.warn('[offline] falha ao salvar fila:', e);
-                }
-            },
-
-            _carregarFila() {
-                try {
-                    const storage = obterArmazenamentoLocal();
-                    if (!storage) return [];
-                    return JSON.parse(storage.getItem(OFFLINE_QUEUE_KEY) || '[]');
-                } catch (e) {
-                    return [];
-                }
-            },
-
-            async sincronizar() {
-                if (this._sincronizando || !this._online || this._filaSincronizacao.length === 0) return;
-                this._sincronizando = true;
-                this._atualizarIndicador();
-
-                const MAX_TENTATIVAS = 5;
-                const fila = [...this._filaSincronizacao];
-                let sucessos = 0;
-                const descartados = [];
-
-                for (const item of fila) {
-                    try {
-                        item.tentativas = (item.tentativas || 0) + 1;
-                        if (item.tentativas > MAX_TENTATIVAS) {
-                            // Descarta operações que falharam repetidamente para não ficar infinito
-                            this._filaSincronizacao = this._filaSincronizacao.filter(i => i.id !== item.id);
-                            this._salvarFila();
-                            descartados.push(item);
-                            continue;
-                        }
-                        const resposta = await callGoogleScript(item.action, item.payload, { _ignorarOffline: true });
-                        if (resposta && resposta.success) {
-                            this._filaSincronizacao = this._filaSincronizacao.filter(i => i.id !== item.id);
-                            this._salvarFila(); // persiste após cada sucesso para evitar reenvio se a página fechar
-                            sucessos++;
-                        }
-                    } catch (e) {
-                        console.warn('[offline] falha ao sincronizar item:', item.action, e);
-                    }
-                }
-
-                this._sincronizando = false;
-                this._atualizarIndicador();
-
-                if (descartados.length > 0) {
-                    console.warn('[offline] operações descartadas após exceder tentativas:', descartados.map(i => i.action));
-                    if (typeof mostrarErro === 'function') {
-                        const quantidade = descartados.length;
-                        mostrarErro(
-                            quantidade === 1
-                                ? '1 operação feita offline não pôde ser sincronizada e foi perdida. Verifique e refaça se necessário.'
-                                : `${quantidade} operações feitas offline não puderam ser sincronizadas e foram perdidas. Verifique e refaça se necessário.`
-                        );
-                    }
-                }
-                if (sucessos > 0 && this._filaSincronizacao.length === 0) {
-                    mostrarSucesso('Dados sincronizados com sucesso!');
-                    limparCacheLeiturasCliente();
-                    if (typeof carregarDadosIniciais === 'function') {
-                        carregarDadosIniciais().catch(() => {});
-                    }
-                }
-            }
-        };
-        // ── Fim Módulo Offline ───────────────────────────────────────────────────
-
         const AVATAR_OPTIONS = [
             {
                 id: 'avatar-none',
@@ -488,41 +242,51 @@
             if (storage) {
                 try {
                     const temaSalvo = storage.getItem(STORAGE_KEYS.tema);
-                    if (temaSalvo === 'dark' || temaSalvo === 'light') {
+                    if (temaSalvo === 'dark' || temaSalvo === 'light' || temaSalvo === 'pink' || temaSalvo === 'copa') {
                         return temaSalvo;
                     }
                 } catch (erro) {
                     console.warn('Falha ao ler tema salvo:', erro);
                 }
             }
-            return 'light';
+            // Tema temporário da Copa é o padrão ao abrir (sem preferência salva).
+            return 'copa';
         }
         function obterProximoTema(temaAtual) {
-            return temaAtual === 'dark' ? 'light' : 'dark';
+            const ordem = ['copa', 'light', 'dark', 'pink'];
+            const indiceAtual = ordem.indexOf(temaAtual);
+            if (indiceAtual === -1) return 'light';
+            return ordem[(indiceAtual + 1) % ordem.length];
         }
         function atualizarBotaoTema(tema) {
             const botaoTema = document.getElementById('theme-toggle');
             if (!botaoTema) return;
             const icone = botaoTema.querySelector('i');
-            const temaAtual = tema === 'dark' ? 'dark' : 'light';
+            const temasValidos = ['dark', 'pink', 'copa'];
+            const temaAtual = temasValidos.indexOf(tema) !== -1 ? tema : 'light';
             const proximoTema = obterProximoTema(temaAtual);
             const labelMap = {
+                copa: 'Ativar tema claro',
                 light: 'Ativar tema escuro',
-                dark: 'Ativar tema claro'
+                dark: 'Ativar tema rosa',
+                pink: 'Ativar tema da Copa'
             };
             const iconMap = {
+                copa: 'fas fa-futbol',
                 light: 'fas fa-sun',
-                dark: 'fas fa-moon'
+                dark: 'fas fa-moon',
+                pink: 'fas fa-heart'
             };
             if (icone) {
-                icone.className = iconMap[temaAtual] || 'fas fa-sun';
+                icone.className = iconMap[temaAtual] || 'fas fa-moon';
             }
             botaoTema.setAttribute('aria-label', labelMap[temaAtual] || 'Alternar tema');
             botaoTema.setAttribute('aria-pressed', temaAtual !== 'light' ? 'true' : 'false');
             botaoTema.dataset.nextTheme = proximoTema;
         }
         function aplicarTema(tema, salvarPreferencia = true) {
-            const temaFinal = tema === 'dark' ? 'dark' : 'light';
+            const temasValidos = ['dark', 'pink', 'copa'];
+            const temaFinal = temasValidos.indexOf(tema) !== -1 ? tema : 'light';
             document.documentElement.setAttribute('data-theme', temaFinal);
             atualizarBotaoTema(temaFinal);
             if (!salvarPreferencia) return;
@@ -535,7 +299,9 @@
             }
         }
         function inicializarTema() {
-            aplicarTema(obterTemaPreferido(), false);
+            // Tema temporário da Copa é forçado na abertura, ignorando qualquer
+            // preferência salva no cache. O usuário ainda pode alternar na sessão.
+            aplicarTema('copa', true);
             const botaoTema = document.getElementById('theme-toggle');
             if (botaoTema) {
                 botaoTema.addEventListener('click', () => {
@@ -2394,19 +2160,11 @@
             });
         }
         // Inicialização
-        function executarInicializacaoSegura(descricao, acao) {
-            try {
-                acao();
-            } catch (erro) {
-                console.error(`Erro ao executar inicialização (${descricao}):`, erro);
-            }
-        }
         document.addEventListener('DOMContentLoaded', function() {
-            executarInicializacaoSegura('inicializarTema', inicializarTema);
-            executarInicializacaoSegura('atualizarOpcoesSetorTermo', atualizarOpcoesSetorTermo);
-            executarInicializacaoSegura('atualizarResponsavelMovimentacaoInfo', atualizarResponsavelMovimentacaoInfo);
-            executarInicializacaoSegura('modoOffline.inicializar', () => modoOffline.inicializar());
-            executarInicializacaoSegura('inicializarLogin', inicializarLogin);
+            inicializarTema();
+            atualizarOpcoesSetorTermo();
+            atualizarResponsavelMovimentacaoInfo();
+            inicializarLogin();
         });
         function aguardar(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -2494,11 +2252,8 @@
             });
 
             const usarCache = opcoes.cache !== false && acoesLeituraComCache.has(action);
-            const ehLeitura = acoesLeituraOffline.has(action);
             const ttlCache = Number.isFinite(opcoes.ttlCacheMs) && opcoes.ttlCacheMs > 0 ? opcoes.ttlCacheMs : CACHE_CHAMADAS_LEITURA_MS;
-            const chaveCache = (usarCache || ehLeitura) ? criarChaveCacheChamada(action, entradas) : '';
-
-            // Verifica cache em memória (rápido)
+            const chaveCache = usarCache ? criarChaveCacheChamada(action, entradas) : '';
             if (usarCache && chaveCache) {
                 const cacheAtual = cacheChamadasLeitura.get(chaveCache);
                 if (cacheAtual && cacheAtual.expiraEm > Date.now()) {
@@ -2508,16 +2263,6 @@
                     cacheChamadasLeitura.delete(chaveCache);
                 }
             }
-
-            // IMPORTANTE: nunca bloqueamos uma requisição preventivamente com base em
-            // navigator.onLine. Esse sinal é NOTORIAMENTE não confiável dentro do
-            // iframe sandbox do Google Apps Script (HtmlService) e em webviews —
-            // pode reportar "offline" mesmo com a conexão funcionando, o que travava
-            // o login com a tela em branco. O modo offline só entra em ação após uma
-            // falha de rede REAL (fetch + google.script.run nativo ambos falharem),
-            // tratada no bloco catch abaixo. navigator.onLine fica só para a barra de
-            // status e para disparar a sincronização ao reconectar.
-            const ignorarOffline = opcoes._ignorarOffline === true;
 
             let atraso = intervaloBaseConfigurado;
             const maxTentativas = Math.max(1, tentativasConfiguradas);
@@ -2548,21 +2293,14 @@
 
                     try {
                         const resposta = JSON.parse(textoResposta);
-                        if (resposta && resposta.success) {
-                            // Atualiza cache em memória
-                            if (usarCache && chaveCache) {
-                                cacheChamadasLeitura.set(chaveCache, {
-                                    valor: resposta,
-                                    expiraEm: Date.now() + ttlCache
-                                });
-                            }
-                            // Persiste no cache offline para uso futuro sem conexão
-                            if (ehLeitura && chaveCache) {
-                                modoOffline.salvarCache(action, chaveCache, resposta);
-                            }
-                            if (!acoesLeituraComCache.has(action)) {
-                                limparCacheLeiturasCliente();
-                            }
+                        if (usarCache && resposta && resposta.success && chaveCache) {
+                            cacheChamadasLeitura.set(chaveCache, {
+                                valor: resposta,
+                                expiraEm: Date.now() + ttlCache
+                            });
+                        }
+                        if (!acoesLeituraComCache.has(action) && resposta && resposta.success) {
+                            limparCacheLeiturasCliente();
                         }
                         return resposta;
                     } catch (parseError) {
@@ -2574,49 +2312,19 @@
                     const ultimaTentativa = tentativa === maxTentativas;
                     console.error(`Erro ao chamar Google Script (ação: ${action}, tentativa ${tentativa}/${maxTentativas}):`, erro);
                     if (ultimaTentativa) {
-                        // Tenta via google.script.run nativo como último recurso
                         try {
                             const respostaNativa = await executarViaGoogleScriptNativo(action, payload);
-                            if (respostaNativa && respostaNativa.success) {
-                                if (usarCache && chaveCache) {
-                                    cacheChamadasLeitura.set(chaveCache, {
-                                        valor: respostaNativa,
-                                        expiraEm: Date.now() + ttlCache
-                                    });
-                                }
-                                if (ehLeitura && chaveCache) {
-                                    modoOffline.salvarCache(action, chaveCache, respostaNativa);
-                                }
-                                if (!acoesLeituraComCache.has(action)) {
-                                    limparCacheLeiturasCliente();
-                                }
+                            if (usarCache && respostaNativa && respostaNativa.success && chaveCache) {
+                                cacheChamadasLeitura.set(chaveCache, {
+                                    valor: respostaNativa,
+                                    expiraEm: Date.now() + ttlCache
+                                });
+                            }
+                            if (!acoesLeituraComCache.has(action) && respostaNativa && respostaNativa.success) {
+                                limparCacheLeiturasCliente();
                             }
                             return respostaNativa;
                         } catch (erroNativo) {
-                            // Falha de rede confirmada (fetch + nativo). A partir daqui
-                            // tratamos como offline real.
-                            // Leituras: tenta servir do cache persistente.
-                            if (ehLeitura && chaveCache) {
-                                const dadosOffline = modoOffline.lerCache(chaveCache);
-                                if (dadosOffline) {
-                                    console.info(`[offline] fallback para cache offline após falha em "${action}"`);
-                                    return dadosOffline;
-                                }
-                            }
-                            // Escritas enfileiráveis: salva para sincronizar ao reconectar,
-                            // em vez de só mostrar erro e perder a operação do usuário.
-                            if (!ignorarOffline && !ehLeitura && !acoesNaoEnfileriaveis.has(action)) {
-                                modoOffline.enfileirar(action, payload);
-                                if (typeof mostrarSucesso === 'function') {
-                                    mostrarSucesso('Sem conexão — operação salva e será enviada ao reconectar.');
-                                }
-                                return {
-                                    success: true,
-                                    _offline: true,
-                                    _enfileirado: true,
-                                    message: 'Operação salva localmente e será sincronizada quando a conexão for restaurada.'
-                                };
-                            }
                             const mensagemUsuario = erroNativo && erroNativo.mensagemUsuario
                                 ? erroNativo.mensagemUsuario
                                 : (erro && erro.mensagemUsuario ? erro.mensagemUsuario : 'Erro de conexão com o servidor');
@@ -2650,26 +2358,21 @@
                 persistirSessaoAtual();
                 return;
             }
-            try {
-                aplicarPreferenciasCabecalhoRestauradas();
-                atualizarInterface();
-                aprimorarSeletoresCabecalho();
-                inicializarCanvasAssinatura();
-                inicializarEventos();
-                await carregarDadosIniciais();
-                atualizarCabecalhoUsuario();
-                if (!turnoIntervalId) {
-                    turnoIntervalId = setInterval(atualizarTurnoCabecalho, 60000);
-                }
-                aplicarPermissoesMenu();
-                atualizarInterface();
-                carregarDadosTabelas();
-                persistirSessaoAtual();
-                aplicacaoInicializada = true;
-            } catch (erro) {
-                aplicacaoInicializada = false;
-                throw erro;
+            aplicacaoInicializada = true;
+            aplicarPreferenciasCabecalhoRestauradas();
+            atualizarInterface();
+            aprimorarSeletoresCabecalho();
+            inicializarCanvasAssinatura();
+            inicializarEventos();
+            await carregarDadosIniciais();
+            atualizarCabecalhoUsuario();
+            if (!turnoIntervalId) {
+                turnoIntervalId = setInterval(atualizarTurnoCabecalho, 60000);
             }
+            aplicarPermissoesMenu();
+            atualizarInterface();
+            carregarDadosTabelas();
+            persistirSessaoAtual();
         }
         function atualizarFeedbackLogin(tipo, mensagem = '') {
             if (!elementos.loginFeedback) {
@@ -2687,49 +2390,27 @@
                 return;
             }
             loginInicializado = true;
-            try {
-                const sessaoRestaurada = restaurarSessaoUsuario();
-                if (sessaoRestaurada && !estado.autenticado) {
-                    const usuarioRestaurado = {
-                        ...sessaoRestaurada
-                    };
-                    usuarioRestaurado.perfil = (usuarioRestaurado.perfil || 'usuario').toString().trim().toLowerCase();
-                    usuarioRestaurado.unidades = normalizarListaDeUnidades(usuarioRestaurado.unidades);
-                    estado.usuarioAutenticado = usuarioRestaurado;
-                    estado.autenticado = true;
-                    persistirSessaoAtual();
-                    if (elementos.loginContainer) {
-                        elementos.loginContainer.classList.add('hidden');
-                    }
-                    if (elementos.appShell) {
-                        elementos.appShell.classList.remove('hidden');
-                    }
-                    atualizarCabecalhoUsuario();
-                    aplicarPermissoesMenu();
-                    inicializarAplicacao().catch(erro => {
-                        console.error('Erro ao inicializar aplicação após restaurar sessão:', erro);
-                        limparSessaoUsuario();
-                        estado.autenticado = false;
-                        if (elementos.appShell) {
-                            elementos.appShell.classList.add('hidden');
-                        }
-                        if (elementos.loginContainer) {
-                            elementos.loginContainer.classList.remove('hidden');
-                        }
-                        atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
-                    });
-                }
-            } catch (erro) {
-                console.error('Erro ao restaurar sessão do usuário:', erro);
-                limparSessaoUsuario();
-                estado.autenticado = false;
-                if (elementos.appShell) {
-                    elementos.appShell.classList.add('hidden');
-                }
+            const sessaoRestaurada = restaurarSessaoUsuario();
+            if (sessaoRestaurada && !estado.autenticado) {
+                const usuarioRestaurado = {
+                    ...sessaoRestaurada
+                };
+                usuarioRestaurado.perfil = (usuarioRestaurado.perfil || 'usuario').toString().trim().toLowerCase();
+                usuarioRestaurado.unidades = normalizarListaDeUnidades(usuarioRestaurado.unidades);
+                estado.usuarioAutenticado = usuarioRestaurado;
+                estado.autenticado = true;
+                persistirSessaoAtual();
                 if (elementos.loginContainer) {
-                    elementos.loginContainer.classList.remove('hidden');
+                    elementos.loginContainer.classList.add('hidden');
                 }
-                atualizarFeedbackLogin('error', 'Não foi possível carregar a aplicação. Faça login novamente.');
+                if (elementos.appShell) {
+                    elementos.appShell.classList.remove('hidden');
+                }
+                atualizarCabecalhoUsuario();
+                aplicarPermissoesMenu();
+                inicializarAplicacao().catch(erro => {
+                    console.error('Erro ao inicializar aplicação após restaurar sessão:', erro);
+                });
             }
             if (!elementos.loginForm) {
                 return;
@@ -2770,14 +2451,6 @@
                     await inicializarAplicacao();
                 } catch (error) {
                     console.error('Erro ao autenticar usuário:', error);
-                    limparSessaoUsuario();
-                    estado.autenticado = false;
-                    if (elementos.appShell) {
-                        elementos.appShell.classList.add('hidden');
-                    }
-                    if (elementos.loginContainer) {
-                        elementos.loginContainer.classList.remove('hidden');
-                    }
                     atualizarFeedbackLogin('error', 'Não foi possível realizar o login. Tente novamente.');
                 } finally {
                     finalizarLoading();
@@ -9358,25 +9031,12 @@
                     console.error('Erro ao atualizar tabelas localmente após aplicar termo:', erro);
                 });
             }
-            // ── Agilidade: fecha o modal e atualiza o front IMEDIATAMENTE ─────────
-            // O estado local otimista já foi aplicado acima. Espelhamos aqui a
-            // percepção de agilidade do fluxo de encerramento: o usuário não espera
-            // o backend — o salvamento segue em segundo plano e o estado só é
-            // revertido caso a persistência realmente falhe.
-            fecharTermoModal();
-            mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
-
-            const reverterTermoLocal = () => {
-                if (armarioIdLocal) {
-                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
-                    carregarDadosTabelas({ recarregarArmarios: false }).catch(() => {});
-                }
-            };
-
-            // Quando o backend não confirma na primeira resposta, checamos se o termo
-            // persistiu mesmo assim (resposta perdida por rede lenta é comum no Apps
-            // Script) antes de reverter — evita desfazer uma operação que deu certo.
-            const confirmarOuReverter = async (resultado) => {
+            const promessaSalvamento = callGoogleScript('salvarTermoCompleto', dadosTermo);
+            let resultado;
+            try {
+                resultado = await promessaSalvamento;
+            } catch (erroSalvar) {
+                console.error('Erro ao salvar termo:', erroSalvar);
                 const persistiu = await confirmarPersistenciaArmario({
                     idInterface: armarioIdLocal,
                     idPlanilha: identificadores?.idPlanilha || '',
@@ -9385,31 +9045,42 @@
                 });
                 if (persistiu) {
                     sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                    mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
                     return;
                 }
-                reverterTermoLocal();
-                if (resultado && !resultado._erroNotificado) {
-                    notificarErroPadrao(resultado);
-                } else if (!resultado) {
-                    mostrarErro(`Não foi possível concluir o termo do armário ${identificadores?.numeroArmario || ''}. Atualize a lista e tente novamente.`.trim());
+                mostrarErro('Não foi possível registrar o termo agora. Tente novamente.');
+                if (armarioIdLocal) {
+                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
                 }
-            };
-
-            // Salvamento em segundo plano. Sem conexão, callGoogleScript enfileira a
-            // operação automaticamente e retorna success (_offline): o termo é
-            // sincronizado assim que a internet voltar, sem travar a interface.
-            callGoogleScript('salvarTermoCompleto', dadosTermo)
-                .then(resultado => {
-                    if (resultado?.success) {
-                        sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
-                        return;
-                    }
-                    return confirmarOuReverter(resultado);
-                })
-                .catch(erroSalvar => {
-                    console.error('Erro ao salvar termo em segundo plano:', erroSalvar);
-                    return confirmarOuReverter(null);
+                return;
+            }
+            if (resultado?.success) {
+                fecharTermoModal();
+                mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
+                atualizarDadosPosOperacao('Atualizando informações do armário...', null, {
+                    modoRapido: true,
+                    timeoutRapido: 600
+                }).catch(erroAtualizacao => {
+                    console.error('Erro ao atualizar dados após salvar termo:', erroAtualizacao);
                 });
+            } else {
+                const persistiu = await confirmarPersistenciaArmario({
+                    idInterface: armarioIdLocal,
+                    idPlanilha: identificadores?.idPlanilha || '',
+                    tipo: 'acompanhante',
+                    validarTermo: true
+                });
+                if (persistiu) {
+                    fecharTermoModal();
+                    sincronizarDadosArmariosEmSegundoPlano({ recarregarArmariosNasTabelas: true });
+                    mostrarSucesso('Etapa inicial do termo registrada. Finalize o termo ao encerrar o armário.');
+                    return;
+                }
+                notificarErroPadrao(resultado);
+                if (armarioIdLocal) {
+                    restaurarArmarioLocal(armarioIdLocal, snapshotArmario);
+                }
+            }
         }
         function fecharTermoModal() {
             if (elementos.termoModal.style.display === 'flex') {
@@ -11251,15 +10922,6 @@
                         usuarioResponsavel,
                         tipo: identificadores?.tipo || ''
                     });
-
-                    if (resultadoUnificado?._offline) {
-                        // Sem conexão: callGoogleScript já enfileirou a operação e avisou o
-                        // usuário. Não há finalizacao/liberacao ainda (só existirão após o
-                        // sync), então não dá pra validar sub-status — e não devemos reverter
-                        // o estado local otimista, que já reflete o armário liberado.
-                        liberacaoConfirmada = true;
-                        return;
-                    }
 
                     const finalizacao = resultadoUnificado?.finalizacao || {};
                     const liberacao = resultadoUnificado?.liberacao || {};
