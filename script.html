@@ -4696,7 +4696,7 @@
                 .filter(a => armarioPassaNosFiltrosSelecionados(a, filtrosAtivos))
                 .filter(armario => !termoBusca || armarioCorrespondeBusca(armario, termoBusca));
 
-            const prioridadeStatusDashboard = { vencido: 0, proximo: 1, contingencia: 2, 'em-uso': 3, livre: 4 };
+            const prioridadeStatusDashboard = { livre: 0, vencido: 1, proximo: 2, contingencia: 3, 'em-uso': 4 };
             armariosParaExibir.sort((a, b) => {
                 const statusA = armarioEhContingencia(a) ? 'contingencia' : a.status;
                 const statusB = armarioEhContingencia(b) ? 'contingencia' : b.status;
@@ -4751,21 +4751,21 @@
                 return card;
             };
 
-            const criarDivisorLivres = () => {
+            const criarDivisorOcupados = () => {
                 const divisor = document.createElement('div');
                 divisor.className = 'armarios-divisor';
-                divisor.innerHTML = '<span>Livres</span>';
+                divisor.innerHTML = '<span>Ocupados</span>';
                 return divisor;
             };
-            const indicePrimeiroLivre = armariosParaExibir.findIndex(
-                a => (armarioEhContingencia(a) ? 'contingencia' : a.status) === 'livre'
+            const indicePrimeiroOcupado = armariosParaExibir.findIndex(
+                a => (armarioEhContingencia(a) ? 'contingencia' : a.status) !== 'livre'
             );
 
             if (opcoes.imediato) {
                 const fragment = document.createDocumentFragment();
                 armariosParaExibir.forEach((armario, index) => {
-                    if (index === indicePrimeiroLivre && indicePrimeiroLivre > 0) {
-                        fragment.appendChild(criarDivisorLivres());
+                    if (index === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
+                        fragment.appendChild(criarDivisorOcupados());
                     }
                     fragment.appendChild(criarCardArmario(armario));
                 });
@@ -4783,8 +4783,8 @@
                     itensProcessados < tamanhoLote &&
                     armariosParaExibir[renderizarArmarios.indiceAtual]
                 ) {
-                    if (renderizarArmarios.indiceAtual === indicePrimeiroLivre && indicePrimeiroLivre > 0) {
-                        elementos.armariosContainer.appendChild(criarDivisorLivres());
+                    if (renderizarArmarios.indiceAtual === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
+                        elementos.armariosContainer.appendChild(criarDivisorOcupados());
                     }
                     elementos.armariosContainer.appendChild(
                         criarCardArmario(armariosParaExibir[renderizarArmarios.indiceAtual])
