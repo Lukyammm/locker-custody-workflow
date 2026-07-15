@@ -4685,7 +4685,7 @@
             const unidadeFiltroNormalizado = normalizarTexto(estado.unidadeAtual);
             const filtrosAtivos = obterFiltrosAtivosDashboard();
             const termoBusca = estado.buscaDashboard;
-            const armariosParaExibir = estado.armarios
+            let armariosParaExibir = estado.armarios
                 .filter(a => {
                     const tipoNormalizado = normalizarTexto(a.tipo);
                     const correspondePerfil = perfilNormalizado === 'geral' || perfilNormalizado === 'todos' || tipoNormalizado === perfilNormalizado;
@@ -4695,6 +4695,20 @@
                 .filter(a => !(armarioEhContingencia(a) && normalizarTexto(a.status) === 'livre'))
                 .filter(a => armarioPassaNosFiltrosSelecionados(a, filtrosAtivos))
                 .filter(armario => !termoBusca || armarioCorrespondeBusca(armario, termoBusca));
+            
+            // Modo "Resumo" quando não há busca ativa nem filtros de status específicos
+            if (!termoBusca && (!filtrosAtivos || filtrosAtivos.length === 0 || (filtrosAtivos.length === 1 && filtrosAtivos[0] === 'todos'))) {
+                const livres = armariosParaExibir.filter(a => a.status === 'livre').slice(0, 5);
+                const ocupados = armariosParaExibir.filter(a => a.status !== 'livre')
+                    .sort((a, b) => {
+                        // Prioriza acompanhantes
+                        const pesoA = normalizarTexto(a.tipo) === 'acompanhante' ? 1 : 0;
+                        const pesoB = normalizarTexto(b.tipo) === 'acompanhante' ? 1 : 0;
+                        return pesoB - pesoA;
+                    })
+                    .slice(0, 5);
+                armariosParaExibir = [...livres, ...ocupados];
+            }
 
             const prioridadeStatusDashboard = { livre: 0, vencido: 1, proximo: 2, contingencia: 3, 'em-uso': 4 };
             armariosParaExibir.sort((a, b) => {

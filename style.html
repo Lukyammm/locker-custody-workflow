@@ -59,7 +59,7 @@
             --sidebar-logout-border: var(--color-neutral-200);
 
             /* Typography */
-            --font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
 
             /* Spacing scale */
             --space-1: 4px;
@@ -7035,5 +7035,149 @@
                 transition-duration: 0.001ms !important;
                 scroll-behavior: auto !important;
             }
+        }
+
+        /* --- NOVO DESIGN DO DASHBOARD (SEARCH-FIRST) --- */
+
+        .search-hero {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: var(--space-6) 0 var(--space-4) 0;
+            width: 100%;
+        }
+
+        .main-search {
+            width: 100%;
+            max-width: 600px;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: var(--space-3) var(--space-5);
+            display: flex;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+
+        .main-search:focus-within {
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.15);
+            border-color: var(--primary-color);
+            background: #fff;
+        }
+
+        .main-search i.fa-search {
+            font-size: 1.2rem;
+            color: var(--primary-color);
+            margin-right: var(--space-3);
+        }
+
+        .main-search input {
+            border: none;
+            background: transparent;
+            font-size: 1.1rem;
+            width: 100%;
+            color: var(--text-color);
+            outline: none;
+            font-family: var(--font-family);
+            font-weight: 500;
+        }
+
+        .cards-hero.compact-hero {
+            display: flex;
+            gap: var(--space-3);
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: var(--space-6);
+        }
+
+        .compact-hero .card {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: var(--space-2) var(--space-4);
+            border-radius: 100px;
+            gap: var(--space-3);
+            background: var(--surface-color);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            min-width: unset;
+        }
+
+        .compact-hero .card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .compact-hero .card-icon {
+            font-size: 1.2rem;
+            width: auto;
+            height: auto;
+            background: none;
+            color: inherit;
+        }
+
+        .compact-hero .card-content {
+            display: flex;
+            flex-direction: row;
+            align-items: baseline;
+            gap: var(--space-2);
+        }
+
+        .compact-hero .card-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1;
+            margin: 0;
+        }
+
+        .compact-hero .card-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--muted-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Colorização dos botões compactos */
+        .compact-hero .card.livre .card-icon { color: var(--status-livre); }
+        .compact-hero .card.em-uso .card-icon { color: var(--status-em-uso); }
+        .compact-hero .card.proximo .card-icon { color: var(--status-proximo); }
+        .compact-hero .card.vencido .card-icon { color: var(--status-vencido); }
+        .compact-hero .card.contingencia .card-icon { color: var(--status-contingencia); }
+
+        .armarios-divisor {
+            width: 100%;
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--muted-color);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: var(--space-4) 0 var(--space-2);
+        }
+        
+        .armarios-divisor::before, .armarios-divisor::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .armarios-divisor span {
+            padding: 0 var(--space-3);
+        }
+
+        .armarios-grid-wrapper {
+            background: var(--surface-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            border: 1px solid var(--border-color);
         }
     </style>
