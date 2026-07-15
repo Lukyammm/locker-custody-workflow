@@ -206,14 +206,16 @@
             --glass-border: color-mix(in srgb, var(--color-neutral-0) 35%, transparent);
             --glass-shadow: 0 24px 44px color-mix(in srgb, var(--shadow-color) 72%, transparent);
 
-            --login-bg: linear-gradient(135deg,
-                color-mix(in srgb, var(--primary-color) 8%, var(--surface-color) 92%),
-                color-mix(in srgb, var(--secondary-color) 8%, var(--surface-color) 92%));
+            --login-bg: radial-gradient(ellipse 900px 500px at 50% -10%,
+                color-mix(in srgb, var(--primary-color) 7%, var(--color-background) 93%),
+                var(--color-background) 70%);
             --login-card-bg: var(--surface-color);
-            --login-title: var(--primary-color);
-            --login-subtitle: var(--color-neutral-900);
+            --login-card-border: color-mix(in srgb, var(--dark-color) 8%, transparent);
+            --login-title: var(--color-neutral-900);
+            --login-subtitle: var(--muted-color);
             --login-label: var(--color-neutral-700);
-            --login-input-bg: color-mix(in srgb, var(--surface-color) 92%, var(--light-color) 8%);
+            --login-input-bg: var(--surface-color);
+            --login-input-icon: var(--muted-color);
             --login-feedback-bg: color-mix(in srgb, var(--dark-color) 3%, transparent);
             --login-help-text: var(--muted-color);
             --login-logo-filter: none;
@@ -264,13 +266,15 @@
             --modal-header-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 94%, var(--color-neutral-900) 6%), var(--color-surface));
             --modal-footer-bg: color-mix(in srgb, var(--color-surface) 88%, var(--color-neutral-900) 12%);
             --modal-divider: color-mix(in srgb, var(--color-neutral-900) 18%, transparent);
-            --login-bg: linear-gradient(135deg,
-                color-mix(in srgb, var(--color-background) 85%, var(--primary-color) 15%),
-                color-mix(in srgb, var(--color-background) 90%, var(--secondary-color) 10%));
+            --login-bg: radial-gradient(ellipse 900px 500px at 50% -10%,
+                color-mix(in srgb, var(--primary-color) 10%, var(--color-background) 90%),
+                var(--color-background) 70%);
             --login-card-bg: var(--color-surface);
-            --login-subtitle: var(--color-neutral-900);
+            --login-card-border: color-mix(in srgb, var(--color-neutral-0) 8%, transparent);
+            --login-subtitle: var(--muted-color);
             --login-label: var(--muted-color);
-            --login-input-bg: color-mix(in srgb, var(--color-surface) 88%, var(--color-background) 12%);
+            --login-input-bg: var(--color-surface);
+            --login-input-icon: var(--muted-color);
             --login-feedback-bg: color-mix(in srgb, var(--color-background) 70%, transparent);
             --login-logo-filter: none;
 
@@ -1953,76 +1957,145 @@
             z-index: var(--z-overlay);
         }
         .login-card {
-            width: min(420px, 100%);
+            width: min(400px, 100%);
             background: var(--login-card-bg);
-            border-radius: calc(var(--radius-lg) + 6px);
-            padding: 40px 36px;
-            box-shadow: var(--shadow-lg);
-            text-align: center;
+            border: 1px solid var(--login-card-border);
+            border-radius: 20px;
+            padding: 40px 34px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
+            text-align: left;
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 24px;
+            animation: loginCardIn 0.4s ease-out;
+        }
+        @keyframes loginCardIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .login-card-header {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
         .login-card h2 {
-            font-size: 1rem;
-            letter-spacing: 0.08em;
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            font-weight: 600;
             text-transform: uppercase;
-            color: var(--login-title);
+            color: var(--muted-color);
+            margin: 0 0 2px;
         }
         .login-card h3 {
-            font-size: 1.35rem;
+            font-size: 1.5rem;
             font-weight: 700;
-            color: var(--login-subtitle);
+            color: var(--login-title);
+            line-height: 1.25;
         }
-        .login-card img {
-            width: 160px;
-            align-self: center;
-            filter: var(--login-logo-filter);
+        .login-card .brand-name {
+            display: block;
+        }
+        .login-card .brand-text {
+            display: block;
+        }
+        .login-card .brand-subtitle {
+            display: block;
+            font-size: 0.88rem;
+            font-weight: 400;
+            color: var(--login-subtitle);
+            margin-top: 4px;
         }
         .login-form {
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 16px;
             text-align: left;
         }
+        .login-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
         .login-form label {
-            font-size: 0.85rem;
-            font-weight: 600;
+            font-size: 0.82rem;
+            font-weight: 500;
             color: var(--login-label);
+        }
+        .login-input-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .login-input-wrap > i {
+            position: absolute;
+            left: 14px;
+            font-size: 0.9rem;
+            color: var(--login-input-icon);
+            pointer-events: none;
         }
         .login-form input {
             width: 100%;
-            border-radius: var(--input-radius);
+            border-radius: 10px;
             border: 1px solid var(--input-border);
-            padding: 12px 14px;
+            padding: 11px 14px 11px 40px;
             font-size: 0.95rem;
             background-color: var(--login-input-bg);
             color: var(--input-text);
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .login-input-wrap:has(#login-senha) input {
+            padding-right: 44px;
         }
         .login-form input:focus {
             outline: none;
             border-color: var(--input-focus-border);
             box-shadow: 0 0 0 3px var(--input-focus-ring);
-            background-color: var(--input-bg);
         }
-        .login-form button {
-            margin-top: 8px;
-            width: 100%;
+        .login-toggle-senha {
+            position: absolute;
+            right: 6px;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border: none;
-            border-radius: var(--btn-radius);
+            background: transparent;
+            color: var(--login-input-icon);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: color 0.15s ease, background-color 0.15s ease;
+        }
+        .login-toggle-senha:hover {
+            color: var(--text-color);
+            background: color-mix(in srgb, var(--dark-color) 6%, transparent);
+        }
+        .login-form button[type="submit"] {
+            margin-top: 4px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border: none;
+            border-radius: 10px;
             padding: 12px 14px;
-            background: var(--btn-primary-bg);
+            background: var(--primary-color);
             color: var(--btn-primary-text);
             font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            position: relative;
-            overflow: hidden;
+            transition: background-color 0.15s ease;
         }
-        .login-form button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 15px 30px color-mix(in srgb, var(--primary-color) 25%, transparent);
+        .login-form button[type="submit"] i {
+            transition: transform 0.15s ease;
+            font-size: 0.85rem;
+        }
+        .login-form button[type="submit"]:hover {
+            background: var(--primary-dark);
+        }
+        .login-form button[type="submit"]:hover i {
+            transform: translateX(2px);
         }
         .login-feedback {
             font-size: 0.85rem;
