@@ -2422,6 +2422,24 @@
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
         }
+        .armarios-divisor {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 4px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted-color);
+        }
+        .armarios-divisor::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-color);
+        }
         .armario-card {
             background: color-mix(in srgb, var(--surface-color) 86%, var(--bg-color) 14%);
             border-radius: var(--radius-md);
