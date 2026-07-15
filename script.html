@@ -4696,19 +4696,7 @@
                 .filter(a => armarioPassaNosFiltrosSelecionados(a, filtrosAtivos))
                 .filter(armario => !termoBusca || armarioCorrespondeBusca(armario, termoBusca));
             
-            // Modo "Resumo" quando não há busca ativa nem filtros de status específicos
-            if (!termoBusca && (!filtrosAtivos || filtrosAtivos.length === 0 || (filtrosAtivos.length === 1 && filtrosAtivos[0] === 'todos'))) {
-                const livres = armariosParaExibir.filter(a => a.status === 'livre').slice(0, 5);
-                const ocupados = armariosParaExibir.filter(a => a.status !== 'livre')
-                    .sort((a, b) => {
-                        // Prioriza acompanhantes
-                        const pesoA = normalizarTexto(a.tipo) === 'acompanhante' ? 1 : 0;
-                        const pesoB = normalizarTexto(b.tipo) === 'acompanhante' ? 1 : 0;
-                        return pesoB - pesoA;
-                    })
-                    .slice(0, 5);
-                armariosParaExibir = [...livres, ...ocupados];
-            }
+            const isResumoMode = (!termoBusca && (!filtrosAtivos || filtrosAtivos.length === 0 || (filtrosAtivos.length === 1 && filtrosAtivos[0] === 'todos')));
 
             const prioridadeStatusDashboard = { livre: 0, vencido: 1, proximo: 2, contingencia: 3, 'em-uso': 4 };
             armariosParaExibir.sort((a, b) => {
@@ -4764,27 +4752,36 @@
                 return card;
             };
 
-            const criarDivisorOcupados = () => {
-                const divisor = document.createElement('div');
-                divisor.className = 'armarios-divisor';
-                divisor.innerHTML = '<span>Ocupados</span>';
-                return divisor;
-            };
-            const indicePrimeiroOcupado = armariosParaExibir.findIndex(
-                a => (armarioEhContingencia(a) ? 'contingencia' : a.status) !== 'livre'
-            );
+            const resumoContainer = document.getElementById('resumo-panels-container');
+            const gridWrapper = document.getElementById('armarios-grid-wrapper');
+            const containerLivres = document.getElementById('container-resumo-livres');
+            const containerOcupados = document.getElementById('container-resumo-ocupados');
 
-            if (opcoes.imediato) {
-                const fragment = document.createDocumentFragment();
-                armariosParaExibir.forEach((armario, index) => {
-                    if (index === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
-                        fragment.appendChild(criarDivisorOcupados());
+            if (resumoContainer && gridWrapper) {
+                if (isResumoMode) {
+                    resumoContainer.style.display = 'flex';
+                    gridWrapper.style.display = 'none';
+                    if (containerLivres) containerLivres.innerHTML = '';
+                    if (containerOcupados) containerOcupados.innerHTML = '';
+                    
+                    const livres = armariosParaExibir.filter(a => a.status === 'livre').slice(0, 5);
+                    const ocupados = armariosParaExibir.filter(a => a.status !== 'livre')
+                        .sort((a, b) => {
+                            const pesoA = normalizarTexto(a.tipo) === 'acompanhante' ? 1 : 0;
+                            const pesoB = normalizarTexto(b.tipo) === 'acompanhante' ? 1 : 0;
+                            return pesoB - pesoA;
+                        }).slice(0, 5);
+                        
+                    if (containerLivres && containerOcupados) {
+                        livres.forEach(a => containerLivres.appendChild(criarCardArmario(a)));
+                        ocupados.forEach(a => containerOcupados.appendChild(criarCardArmario(a)));
                     }
-                    fragment.appendChild(criarCardArmario(armario));
-                });
-                elementos.armariosContainer.appendChild(fragment);
-                renderizarArmariosAgendamento = null;
-                return;
+                    renderizarArmariosAgendamento = null;
+                    return;
+                } else {
+                    resumoContainer.style.display = 'none';
+                    gridWrapper.style.display = 'block';
+                }
             }
 
             const processarLote = (deadline) => {
@@ -4796,9 +4793,6 @@
                     itensProcessados < tamanhoLote &&
                     armariosParaExibir[renderizarArmarios.indiceAtual]
                 ) {
-                    if (renderizarArmarios.indiceAtual === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
-                        elementos.armariosContainer.appendChild(criarDivisorOcupados());
-                    }
                     elementos.armariosContainer.appendChild(
                         criarCardArmario(armariosParaExibir[renderizarArmarios.indiceAtual])
                     );

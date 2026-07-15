@@ -181,18 +181,21 @@
         <div id="pages-container">
             <!-- Monitor -->
             <div class="page active" id="dashboard">
-                <!-- Busca Principal Centralizada -->
-                <div class="search-hero">
-                    <div class="filter-search main-search" aria-label="Busca rápida">
-                        <i class="fas fa-search" aria-hidden="true"></i>
-                        <input type="text" id="dashboard-search" placeholder="Busque por armário, paciente ou acompanhante..." aria-label="Buscar por paciente, prontuário ou armário">
-                        <button class="filter-clear" id="dashboard-search-clear" type="button" aria-label="Limpar busca" aria-hidden="true">
-                            <i class="fas fa-times" aria-hidden="true"></i>
+                <!-- Cabeçalho de Busca Premium -->
+                <div class="search-hero-premium">
+                    <div class="search-input-wrapper">
+                        <i class="fas fa-search search-icon" aria-hidden="true"></i>
+                        <input type="text" id="dashboard-search" placeholder="Pesquisar paciente, acompanhante ou armário..." autocomplete="off">
+                        <button class="filter-clear" id="dashboard-search-clear" type="button" style="display:none;">
+                            <i class="fas fa-times"></i>
                         </button>
                     </div>
+                    <button class="btn btn-contingencia-premium" id="btn-contingencia">
+                        <i class="fas fa-shield-alt"></i> Modo Contingência
+                    </button>
                 </div>
 
-                <!-- Cards Hero (Compactos) -->
+                <!-- Cards Hero (Resumo Numérico) -->
                 <div class="cards-hero compact-hero">
                     <div class="card em-uso" data-filter="em-uso">
                         <div class="card-icon"><i class="fas fa-user-clock"></i></div>
@@ -219,29 +222,43 @@
                         <div class="card-icon"><i class="fas fa-shield-alt"></i></div>
                         <div class="card-content">
                             <div class="card-value" id="contingencia-count">0</div>
-                            <div class="card-title">Contingência</div>
-                        </div>
-                    </div>
-                    <div class="card vencido" data-filter="vencido">
-                        <div class="card-icon"><i class="fas fa-times-circle"></i></div>
-                        <div class="card-content">
-                            <div class="card-value" id="vencidos-count">0</div>
-                            <div class="card-title">Vencidos</div>
+                            <div class="card-title">Conting.</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Tabela de Armários (Lista de resultados ou resumo) -->
-                <div class="armarios-grid-wrapper">
-                    <!-- Botões de Ação Secundários -->
-                    <div class="contingencia-actions">
-                        <button class="btn btn-ghost btn-contingencia" id="btn-contingencia" aria-label="Registrar contingência">
-                            <i class="fas fa-person-walking-luggage" aria-hidden="true"></i>
-                            Modo Contingência
-                        </button>
+                <!-- Área de Resumo (Painéis lado a lado) -->
+                <div class="resumo-panels-container" id="resumo-panels-container">
+                    <div class="resumo-panel panel-acompanhantes">
+                        <div class="panel-header">
+                            <h3><i class="fas fa-history"></i> Últimos Atendimentos</h3>
+                            <span class="panel-badge">Acompanhantes</span>
+                        </div>
+                        <div class="armarios-grid" id="container-resumo-ocupados">
+                            <!-- JS injeta aqui -->
+                        </div>
+                        <div class="panel-footer">
+                            <p class="panel-hint">Exibindo os últimos 5 registros.</p>
+                        </div>
                     </div>
+                    <div class="resumo-panel panel-livres">
+                        <div class="panel-header">
+                            <h3><i class="fas fa-check-circle"></i> Prontos para Uso</h3>
+                            <span class="panel-badge success">Livres</span>
+                        </div>
+                        <div class="armarios-grid" id="container-resumo-livres">
+                            <!-- JS injeta aqui -->
+                        </div>
+                        <div class="panel-footer">
+                            <p class="panel-hint">Exibindo 5 armários sugeridos.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Resultados Completos (Oculta por padrão) -->
+                <div class="armarios-grid-wrapper" id="armarios-grid-wrapper" style="display: none;">
                     <div class="armarios-grid" id="armarios-container">
-                        <!-- Os armários serão carregados aqui via JavaScript -->
+                        <!-- Os armários pesquisados serão carregados aqui -->
                     </div>
                 </div>
             </div>
