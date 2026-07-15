@@ -2509,6 +2509,20 @@
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
         }
+        .armario-card.livre {
+            padding: 10px 12px 9px;
+            gap: 4px;
+            background: color-mix(in srgb, var(--livre-main) 10%, var(--surface-color) 90%);
+            border-color: color-mix(in srgb, var(--livre-main) 22%, var(--border-color) 78%);
+        }
+        .armario-card.livre .armario-number.prominent {
+            font-size: 1.5rem;
+        }
+        .armario-card.livre .armario-status-icon {
+            width: 32px;
+            height: 32px;
+            font-size: 0.85rem;
+        }
         .armario-card.em-uso {
             position: relative;
             overflow: hidden;
