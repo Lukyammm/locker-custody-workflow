@@ -14,28 +14,57 @@
 </head>
 <body>
     <div id="login-container" class="login-wrapper">
+        <div class="login-decor" aria-hidden="true"></div>
         <div class="login-card">
+            <div class="login-logo-wrap">
+                <img src="https://i.ibb.co/hxbRMNvV/logo-HUC.jpg" alt="Logo Hospital Universitário do Ceará" loading="lazy">
+            </div>
             <h2>ACESSO RESTRITO</h2>
-            <img src="https://i.ibb.co/hxbRMNvV/logo-HUC.jpg" alt="Logo Hospital Universitário do Ceará" loading="lazy">
             <h3 class="brand-name" aria-label="Cosign - Gerenciamento de Armários">
                 <span class="brand-text">Cosign</span>
-                <span class="brand-subtitle">- Gerenciamento de Armários</span>
+                <span class="brand-subtitle">Gerenciamento de Armários</span>
             </h3>
             <form id="login-form" class="login-form" novalidate>
-                <div>
+                <div class="login-field">
                     <label for="login-usuario">Usuário</label>
-                    <input type="text" id="login-usuario" autocomplete="username" placeholder="Digite seu usuário" required>
+                    <div class="login-input-wrap">
+                        <i class="fas fa-user" aria-hidden="true"></i>
+                        <input type="text" id="login-usuario" autocomplete="username" placeholder="Digite seu usuário" required>
+                    </div>
                 </div>
-                <div>
+                <div class="login-field">
                     <label for="login-senha">Senha</label>
-                    <input type="password" id="login-senha" autocomplete="current-password" required>
+                    <div class="login-input-wrap">
+                        <i class="fas fa-lock" aria-hidden="true"></i>
+                        <input type="password" id="login-senha" autocomplete="current-password" required>
+                        <button type="button" class="login-toggle-senha" id="login-toggle-senha" aria-label="Mostrar senha" aria-pressed="false">
+                            <i class="fas fa-eye" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </div>
-                <button type="submit" id="login-submit">Entrar</button>
+                <button type="submit" id="login-submit">
+                    <span>Entrar</span>
+                    <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                </button>
             </form>
             <div id="login-feedback" class="login-feedback" role="status" aria-live="polite"></div>
             <div class="login-help">Precisa de ajuda com o acesso?</div>
         </div>
     </div>
+    <script>
+        (function () {
+            var toggle = document.getElementById('login-toggle-senha');
+            var senha = document.getElementById('login-senha');
+            if (!toggle || !senha) return;
+            toggle.addEventListener('click', function () {
+                var showing = senha.type === 'text';
+                senha.type = showing ? 'password' : 'text';
+                toggle.setAttribute('aria-pressed', String(!showing));
+                toggle.setAttribute('aria-label', showing ? 'Mostrar senha' : 'Ocultar senha');
+                toggle.querySelector('i').className = showing ? 'fas fa-eye' : 'fas fa-eye-slash';
+            });
+        })();
+    </script>
     <div id="app-shell" class="app-shell hidden">
         <!-- Sidebar -->
         <div class="sidebar">
