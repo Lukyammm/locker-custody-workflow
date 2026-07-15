@@ -3894,7 +3894,9 @@ function getHistorico(tipo) {
         colunasMinimas: 15
       });
       if (dadosBackup.length) {
-        data = data.concat(dadosBackup);
+        // O backup guarda os registros mais antigos (já arquivados); precisa vir antes
+        // dos registros da planilha atual para o reverse() abaixo deixar os mais recentes primeiro.
+        data = dadosBackup.concat(data);
       }
       var historico = [];
 
@@ -3950,7 +3952,9 @@ function montarHistoricoTermosResponsabilidade() {
     colunasMinimas: 21
   });
   if (dadosBackup.length) {
-    data = data.concat(dadosBackup);
+    // O backup guarda os registros mais antigos (já arquivados); precisa vir antes
+    // dos registros da planilha atual para o reverse() abaixo deixar os mais recentes primeiro.
+    data = dadosBackup.concat(data);
   }
 
   if (!data.length) {
