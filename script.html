@@ -4731,9 +4731,8 @@
                     contingencia: 'fas fa-shield-alt'
                 };
                 const statusIcone = statusIcones[classeStatus] || 'fas fa-circle';
-                const nomePaciente = armario.status === 'livre'
-                    ? 'Disponível'
-                    : (armario.nomePaciente || '-');
+                const ehLivre = classeStatus === 'livre';
+                const nomePaciente = armario.nomePaciente || '-';
                 card.innerHTML = `
                     <div class="armario-status-bar status-${classeStatus}" aria-hidden="true"></div>
                     <div class="armario-header minimal">
@@ -4745,7 +4744,7 @@
                             <span class="sr-only">${statusTexto}</span>
                         </div>
                     </div>
-                    <div class="armario-paciente-line" title="${nomePaciente}">${nomePaciente}</div>
+                    ${ehLivre ? '' : `<div class="armario-paciente-line" title="${nomePaciente}">${nomePaciente}</div>`}
                 `;
                 card.addEventListener('click', () => abrirModalArmario(armario));
                 return card;
