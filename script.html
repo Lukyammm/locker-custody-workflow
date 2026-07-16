@@ -1294,6 +1294,106 @@
         }
         function aprimorarSeletoresCabecalho() {
             document.querySelectorAll('.selector-control .selector-input').forEach(select => criarSelectorPersonalizado(select));
+            inicializarPillContexto();
+            inicializarTooltipsRail();
+        }
+        // Pill de contexto do header: espelha os selects de perfil/unidade e
+        // controla o popover que contém os dois seletores.
+        function atualizarPillContexto() {
+            const perfilSelect = document.getElementById('profile-select');
+            const unidadeSelect = document.getElementById('unit-select');
+            const alvoPerfil = document.getElementById('context-pill-profile');
+            const alvoUnidade = document.getElementById('context-pill-unit');
+            if (alvoPerfil && perfilSelect) {
+                alvoPerfil.textContent = perfilSelect.options[perfilSelect.selectedIndex]?.textContent || 'Perfil geral';
+            }
+            if (alvoUnidade && unidadeSelect) {
+                alvoUnidade.textContent = unidadeSelect.options[unidadeSelect.selectedIndex]?.textContent || 'Todas as unidades';
+            }
+        }
+        let pillContextoInicializada = false;
+        function inicializarPillContexto() {
+            if (pillContextoInicializada) {
+                atualizarPillContexto();
+                return;
+            }
+            const wrap = document.querySelector('.header-context');
+            const pill = document.getElementById('context-pill');
+            if (!wrap || !pill) return;
+            pillContextoInicializada = true;
+            const fechar = () => {
+                wrap.classList.remove('open');
+                pill.setAttribute('aria-expanded', 'false');
+            };
+            pill.addEventListener('click', () => {
+                const aberto = wrap.classList.toggle('open');
+                pill.setAttribute('aria-expanded', String(aberto));
+            });
+            document.addEventListener('click', event => {
+                if (!wrap.contains(event.target)) fechar();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && wrap.classList.contains('open')) {
+                    fechar();
+                    pill.focus();
+                }
+            });
+            ['profile-select', 'unit-select'].forEach(id => {
+                document.getElementById(id)?.addEventListener('change', atualizarPillContexto);
+            });
+            atualizarPillContexto();
+        }
+        // Steppers dos wizards: acendem os marcos conforme o rótulo
+        // "Passo X de Y" muda (a lógica dos wizards permanece intocada).
+        function inicializarSteppers() {
+            document.querySelectorAll('.wizard-stepper[data-progress-label]').forEach(stepperEl => {
+                if (stepperEl.dataset.stepperInicializado) return;
+                const label = document.getElementById(stepperEl.dataset.progressLabel);
+                if (!label) return;
+                stepperEl.dataset.stepperInicializado = 'true';
+                const aplicar = () => {
+                    const correspondencia = (label.textContent || '').match(/(\d+)\s*de\s*(\d+)/);
+                    if (!correspondencia) return;
+                    const atual = Number(correspondencia[1]);
+                    stepperEl.querySelectorAll('.wizard-stepper-step').forEach(step => {
+                        const indice = Number(step.dataset.index);
+                        step.classList.toggle('is-done', indice < atual);
+                        step.classList.toggle('is-active', indice === atual);
+                    });
+                };
+                new MutationObserver(aplicar).observe(label, { childList: true, characterData: true, subtree: true });
+                aplicar();
+            });
+        }
+        // Tooltip flutuante do rail (elemento único no body — o rail tem
+        // overflow-y:auto e clipparia pseudo-elementos posicionados).
+        let railTooltipEl = null;
+        function inicializarTooltipsRail() {
+            if (railTooltipEl || window.matchMedia('(hover: none)').matches) return;
+            const alvos = document.querySelectorAll('.sidebar [data-tooltip]');
+            if (!alvos.length) return;
+            railTooltipEl = document.createElement('div');
+            railTooltipEl.className = 'rail-tooltip';
+            railTooltipEl.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(railTooltipEl);
+            const mostrar = alvo => {
+                if (window.matchMedia('(max-width: 1024px)').matches) return;
+                const texto = alvo.getAttribute('data-tooltip');
+                if (!texto) return;
+                railTooltipEl.textContent = texto;
+                const rect = alvo.getBoundingClientRect();
+                railTooltipEl.style.left = `${Math.round(rect.right + 10)}px`;
+                railTooltipEl.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
+                railTooltipEl.style.transform = 'translateY(-50%)';
+                railTooltipEl.classList.add('visible');
+            };
+            const esconder = () => railTooltipEl.classList.remove('visible');
+            alvos.forEach(alvo => {
+                alvo.addEventListener('mouseenter', () => mostrar(alvo));
+                alvo.addEventListener('mouseleave', esconder);
+                alvo.addEventListener('focus', () => mostrar(alvo));
+                alvo.addEventListener('blur', esconder);
+            });
         }
         function criarSelectorPersonalizado(select) {
             if (!select) return;
@@ -1423,6 +1523,7 @@
                 button.classList.toggle('is-selected', Boolean(isSelected));
                 button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             });
+            atualizarPillContexto();
         }
         function toggleSelectorDropdown(instance, forceState) {
             const { control, trigger } = instance;
@@ -2340,6 +2441,7 @@
             aplicarPreferenciasCabecalhoRestauradas();
             atualizarInterface();
             aprimorarSeletoresCabecalho();
+            inicializarSteppers();
             inicializarCanvasAssinatura();
             inicializarEventos();
             await carregarDadosIniciais();
@@ -2575,11 +2677,17 @@
                 skeletonCard.className = 'armario-card skeleton';
                 skeletonCard.innerHTML = `
                     <div class="armario-status-bar skeleton-block" aria-hidden="true"></div>
-                    <div class="armario-header minimal">
+                    <div class="armario-card-top">
                         <div class="armario-number skeleton-block" aria-hidden="true"></div>
                         <div class="skeleton-status" aria-hidden="true"></div>
                     </div>
-                    <div class="armario-paciente-line skeleton-line" aria-hidden="true"></div>
+                    <div class="armario-card-info">
+                        <div class="skeleton-chip" aria-hidden="true"></div>
+                    </div>
+                    <div class="armario-card-actions">
+                        <div class="skeleton-status" aria-hidden="true"></div>
+                        <div class="skeleton-status" aria-hidden="true"></div>
+                    </div>
                 `;
                 elementos.armariosContainer.appendChild(skeletonCard);
             }
@@ -4685,7 +4793,7 @@
             const unidadeFiltroNormalizado = normalizarTexto(estado.unidadeAtual);
             const filtrosAtivos = obterFiltrosAtivosDashboard();
             const termoBusca = estado.buscaDashboard;
-            let armariosParaExibir = estado.armarios
+            const armariosParaExibir = estado.armarios
                 .filter(a => {
                     const tipoNormalizado = normalizarTexto(a.tipo);
                     const correspondePerfil = perfilNormalizado === 'geral' || perfilNormalizado === 'todos' || tipoNormalizado === perfilNormalizado;
@@ -4695,8 +4803,6 @@
                 .filter(a => !(armarioEhContingencia(a) && normalizarTexto(a.status) === 'livre'))
                 .filter(a => armarioPassaNosFiltrosSelecionados(a, filtrosAtivos))
                 .filter(armario => !termoBusca || armarioCorrespondeBusca(armario, termoBusca));
-            
-            const isResumoMode = (!termoBusca && (!filtrosAtivos || filtrosAtivos.length === 0 || (filtrosAtivos.length === 1 && filtrosAtivos[0] === 'todos')));
 
             const prioridadeStatusDashboard = { livre: 0, vencido: 1, proximo: 2, contingencia: 3, 'em-uso': 4 };
             armariosParaExibir.sort((a, b) => {
@@ -4716,7 +4822,7 @@
                 if (armario.visitaEstendida) {
                     card.classList.add('visita-estendida');
                 }
-                const statusTexto = armarioEhContingencia(armario)
+                const statusTexto = classeStatus === 'contingencia'
                     ? 'Contingência'
                     : armario.status === 'livre'
                         ? 'Livre'
@@ -4726,7 +4832,7 @@
                                 ? 'Próximo'
                                 : 'Vencido';
                 const statusIcones = {
-                    livre: 'fas fa-check',
+                    livre: 'fas fa-key',
                     'em-uso': 'fas fa-user-clock',
                     proximo: 'fas fa-exclamation-triangle',
                     vencido: 'fas fa-times-circle',
@@ -4735,53 +4841,74 @@
                 const statusIcone = statusIcones[classeStatus] || 'fas fa-circle';
                 const ehLivre = classeStatus === 'livre';
                 const nomePaciente = armario.nomePaciente || '-';
+                const tipoLabel = normalizarTexto(armario.tipo) === 'acompanhante' ? 'Acompanhante' : 'Visitante';
+                const subLinha = classeStatus === 'contingencia'
+                    ? 'Acesso de contingência'
+                    : ehLivre
+                        ? 'Pronto para uso'
+                        : `${tipoLabel}${armario.horaInicio ? ` • desde ${armario.horaInicio}` : ''}`;
+                const rotuloPrimario = ehLivre ? 'Abrir agora' : 'Liberar';
                 card.innerHTML = `
-                    <div class="armario-status-bar status-${classeStatus}" aria-hidden="true"></div>
-                    <div class="armario-header minimal">
-                        <div class="armario-identificacao">
-                            <span class="armario-number prominent">${armario.numero}</span>
+                    <div class="armario-status-bar" aria-hidden="true"></div>
+                    <div class="armario-card-top">
+                        <span class="armario-number prominent">${armario.numero}</span>
+                        <span class="armario-status-pill">
+                            <span class="armario-status-dot" aria-hidden="true"></span>${statusTexto}
+                        </span>
+                    </div>
+                    <div class="armario-card-info">
+                        <div class="armario-status-icon status-${classeStatus}" aria-hidden="true">
+                            <i class="${statusIcone}"></i>
                         </div>
-                        <div class="armario-status-icon status-${classeStatus}" aria-label="${statusTexto}">
-                            <i class="${statusIcone}" aria-hidden="true"></i>
-                            <span class="sr-only">${statusTexto}</span>
+                        <div class="armario-card-textos">
+                            <span class="armario-card-nome" title="${ehLivre ? statusTexto : nomePaciente}">${ehLivre ? 'Disponível' : nomePaciente}</span>
+                            <span class="armario-card-sub">${subLinha}</span>
                         </div>
                     </div>
-                    ${ehLivre ? '' : `<div class="armario-paciente-line" title="${nomePaciente}">${nomePaciente}</div>`}
+                    <div class="armario-card-actions">
+                        <button type="button" class="armario-card-btn consultar" data-acao="consultar" aria-label="Consultar armário ${armario.numero}">Consultar</button>
+                        <button type="button" class="armario-card-btn abrir" data-acao="abrir" aria-label="${rotuloPrimario} armário ${armario.numero}">${rotuloPrimario}</button>
+                    </div>
                 `;
+                const botaoConsultar = card.querySelector('[data-acao="consultar"]');
+                const botaoAbrir = card.querySelector('[data-acao="abrir"]');
+                if (botaoConsultar) {
+                    botaoConsultar.addEventListener('click', event => {
+                        event.stopPropagation();
+                        abrirConsultaArmario(armario);
+                    });
+                }
+                if (botaoAbrir) {
+                    botaoAbrir.addEventListener('click', event => {
+                        event.stopPropagation();
+                        executarAcaoPrimariaArmario(armario);
+                    });
+                }
                 card.addEventListener('click', () => abrirModalArmario(armario));
                 return card;
             };
 
-            const resumoContainer = document.getElementById('resumo-panels-container');
-            const gridWrapper = document.getElementById('armarios-grid-wrapper');
-            const containerLivres = document.getElementById('container-resumo-livres');
-            const containerOcupados = document.getElementById('container-resumo-ocupados');
+            const criarDivisorOcupados = () => {
+                const divisor = document.createElement('div');
+                divisor.className = 'armarios-divisor';
+                divisor.innerHTML = '<span>Ocupados</span>';
+                return divisor;
+            };
+            const indicePrimeiroOcupado = armariosParaExibir.findIndex(
+                a => (armarioEhContingencia(a) ? 'contingencia' : a.status) !== 'livre'
+            );
 
-            if (resumoContainer && gridWrapper) {
-                if (isResumoMode) {
-                    resumoContainer.style.display = 'flex';
-                    gridWrapper.style.display = 'none';
-                    if (containerLivres) containerLivres.innerHTML = '';
-                    if (containerOcupados) containerOcupados.innerHTML = '';
-                    
-                    const livres = armariosParaExibir.filter(a => a.status === 'livre').slice(0, 5);
-                    const ocupados = armariosParaExibir.filter(a => a.status !== 'livre')
-                        .sort((a, b) => {
-                            const pesoA = normalizarTexto(a.tipo) === 'acompanhante' ? 1 : 0;
-                            const pesoB = normalizarTexto(b.tipo) === 'acompanhante' ? 1 : 0;
-                            return pesoB - pesoA;
-                        }).slice(0, 5);
-                        
-                    if (containerLivres && containerOcupados) {
-                        livres.forEach(a => containerLivres.appendChild(criarCardArmario(a)));
-                        ocupados.forEach(a => containerOcupados.appendChild(criarCardArmario(a)));
+            if (opcoes.imediato) {
+                const fragment = document.createDocumentFragment();
+                armariosParaExibir.forEach((armario, index) => {
+                    if (index === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
+                        fragment.appendChild(criarDivisorOcupados());
                     }
-                    renderizarArmariosAgendamento = null;
-                    return;
-                } else {
-                    resumoContainer.style.display = 'none';
-                    gridWrapper.style.display = 'block';
-                }
+                    fragment.appendChild(criarCardArmario(armario));
+                });
+                elementos.armariosContainer.appendChild(fragment);
+                renderizarArmariosAgendamento = null;
+                return;
             }
 
             const processarLote = (deadline) => {
@@ -4793,6 +4920,9 @@
                     itensProcessados < tamanhoLote &&
                     armariosParaExibir[renderizarArmarios.indiceAtual]
                 ) {
+                    if (renderizarArmarios.indiceAtual === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
+                        elementos.armariosContainer.appendChild(criarDivisorOcupados());
+                    }
                     elementos.armariosContainer.appendChild(
                         criarCardArmario(armariosParaExibir[renderizarArmarios.indiceAtual])
                     );
@@ -4837,6 +4967,15 @@
                     return;
                 }
 
+                // Contingências são identificadas como os cards do Monitor (flag,
+                // número ou status) e as livres ficam de fora, como na listagem.
+                if (armarioEhContingencia(armario)) {
+                    if (normalizarTexto(armario.status) !== 'livre') {
+                        totais.contingencia += 1;
+                    }
+                    return;
+                }
+
                 switch (armario.status) {
                     case 'livre':
                         totais.livres += 1;
@@ -4846,9 +4985,6 @@
                         break;
                     case 'proximo':
                         totais.proximo += 1;
-                        break;
-                    case 'contingencia':
-                        totais.contingencia += 1;
                         break;
                     case 'vencido':
                         totais.vencidos += 1;
@@ -6467,6 +6603,7 @@
             atualizarSelectorPersonalizado(elementos.unitSelect);
             salvarPreferenciasCabecalho();
             atualizarFiltroUnidadeTermos();
+            atualizarPillContexto();
         }
         function renderizarTabelaUnidades() {
             if (!elementos.tabelaUnidadesBody) return;
@@ -6630,6 +6767,73 @@
                 }
             }
         }
+        // Consulta rápida a partir do card do Monitor: para armários livres mostra
+        // um resumo simples; para ocupados abre o modal completo de detalhes.
+        function abrirConsultaArmario(armario) {
+            if (!armario) return;
+            if (normalizarTexto(armario.status) === 'livre' && !armarioEhContingencia(armario)) {
+                const tipoLabel = normalizarTexto(armario.tipo) === 'acompanhante' ? 'Acompanhante' : 'Visitante';
+                Swal.fire({
+                    html: `
+                        <div class="armario-modal-card consulta-livre">
+                            <header class="armario-modal-header">
+                                <div class="armario-modal-hero">
+                                    <div class="armario-modal-icon livre">
+                                        <i class="fas fa-key" aria-hidden="true"></i>
+                                    </div>
+                                    <div>
+                                        <div class="armario-modal-eyebrow">${tipoLabel}</div>
+                                        <h2 class="armario-modal-title">Armário ${armario.numero}</h2>
+                                        <p class="armario-modal-subtitle">${armario.unidade || '-'}</p>
+                                    </div>
+                                </div>
+                                <span class="armario-modal-status status-livre">
+                                    <span class="armario-modal-status-dot" aria-hidden="true"></span>
+                                    Livre
+                                </span>
+                            </header>
+                            <div class="armario-modal-section">
+                                <p class="armario-modal-consulta-texto">
+                                    Este armário está disponível. Use <strong>Abrir agora</strong> para iniciar um novo cadastro.
+                                </p>
+                            </div>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: 'Abrir agora',
+                    cancelButtonText: 'Fechar',
+                    reverseButtons: true,
+                    buttonsStyling: false,
+                    customClass: {
+                        popup: 'armario-modal-popup',
+                        confirmButton: 'armario-modal-primary',
+                        cancelButton: 'armario-modal-tertiary'
+                    }
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        abrirModalArmario(armario);
+                    }
+                });
+                return;
+            }
+            abrirModalArmario(armario);
+        }
+
+        // Ação primária do card: livre abre o fluxo de cadastro/termo;
+        // ocupado (inclusive contingência) vai direto para a liberação.
+        function executarAcaoPrimariaArmario(armario) {
+            if (!armario) return;
+            if (normalizarTexto(armario.status) === 'livre' && !armarioEhContingencia(armario)) {
+                abrirModalArmario(armario);
+                return;
+            }
+            if (normalizarTexto(armario.tipo) === 'visitante') {
+                confirmarLiberacaoVisitante(armario.id);
+            } else {
+                confirmarLiberacaoAcompanhante(armario.id);
+            }
+        }
+
         function abrirModalArmario(armario) {
             garantirPortaisCabecalho();
             if (armario.status === 'livre') {
@@ -6823,14 +7027,13 @@
                             ${armario.tipo === 'acompanhante' && termoPendente ? `<div class="armario-modal-actions"><button id="btn-aplicar-termo" class="armario-modal-primary-inline" type="button">Aplicar termo agora</button></div>` : ''}
                         </div>
                     `,
-                    icon: 'info',
                     showCancelButton: true,
                     showDenyButton: armario.tipo === 'acompanhante',
                     confirmButtonText: 'Liberar Armário',
                     denyButtonText: 'Movimentações',
                     cancelButtonText: 'Fechar',
-                    confirmButtonColor: '#28a745',
                     reverseButtons: true,
+                    buttonsStyling: false,
                     customClass: {
                         popup: 'armario-modal-popup',
                         confirmButton: 'armario-modal-primary',
@@ -7944,6 +8147,18 @@
                 return numero > 0 ? numero : minimo;
             }
             return valorNormalizado || minimo;
+        }
+        // Gera resumo em linhas rótulo/valor para modais Swal.
+        // Pares com valor vazio/nulo são omitidos.
+        function gerarLinhasResumo(pares) {
+            const linhas = (pares || [])
+                .filter(par => Array.isArray(par) && par[1] !== null && par[1] !== undefined && String(par[1]).trim() !== '')
+                .map(([rotulo, valor]) => `
+                    <div class="resumo-row">
+                        <span class="resumo-label">${rotulo}</span>
+                        <span class="resumo-value">${valor}</span>
+                    </div>`).join('');
+            return `<div class="resumo-list">${linhas}</div>`;
         }
         function formatarVolumeParaExibicao(valor, minimo = 1) {
             const volumeNormalizado = aplicarMinimoVolumes(valor, minimo);
@@ -10668,35 +10883,35 @@
             }
             const termo = resultado.data;
             const metodoFinalNormalizado = normalizarTexto(termo.metodoFinal);
-            let metodoEncerramentoHtml = '';
+            let descricaoMetodo = '';
             if (termo.metodoFinal) {
-                let descricaoMetodo = 'Assinatura digital';
+                descricaoMetodo = 'Assinatura digital';
                 if (metodoFinalNormalizado === 'cpf') {
                     descricaoMetodo = `Confirmação por CPF (${termo.cpfConfirmacao || ''})`;
                 } else if (metodoFinalNormalizado === 'manual') {
                     descricaoMetodo = 'Finalização manual (sem assinatura digital)';
                 }
-                metodoEncerramentoHtml = `<p><strong>Método de encerramento:</strong> ${descricaoMetodo}</p>`;
             }
 
-            const html = `
-                <p><strong>Paciente:</strong> ${termo.paciente}</p>
-                <p><strong>Prontuário:</strong> ${termo.prontuario}</p>
-                <p><strong>Setor:</strong> ${termo.setor}</p>
-                <p><strong>Leito:</strong> ${termo.leito}</p>
-                <p><strong>Acompanhante:</strong> ${termo.acompanhante}</p>
-                ${termo.telefone ? `<p><strong>Telefone:</strong> ${termo.telefone}</p>` : ''}
-                ${termo.documento ? `<p><strong>Documento:</strong> ${termo.documento}</p>` : ''}
-                ${termo.parentesco ? `<p><strong>Parentesco:</strong> ${termo.parentesco}</p>` : ''}
-                <p><strong>Volumes:</strong> ${termo.descricaoVolumes}</p>
-                <p><strong>Aplicado em:</strong> ${formatarDataHora(termo.aplicadoEm)}</p>
-                ${termo.finalizadoEm ? `<p><strong>Finalizado em:</strong> ${formatarDataHora(termo.finalizadoEm)}</p>` : '<p><strong>Status:</strong> Em andamento</p>'}
-                ${metodoEncerramentoHtml}
-            `;
+            const html = gerarLinhasResumo([
+                ['Paciente', termo.paciente],
+                ['Prontuário', termo.prontuario],
+                ['Setor', termo.setor],
+                ['Leito', termo.leito],
+                ['Acompanhante', termo.acompanhante],
+                ['Telefone', termo.telefone],
+                ['Documento', termo.documento],
+                ['Parentesco', termo.parentesco],
+                ['Volumes', termo.descricaoVolumes],
+                ['Aplicado em', formatarDataHora(termo.aplicadoEm)],
+                termo.finalizadoEm
+                    ? ['Finalizado em', formatarDataHora(termo.finalizadoEm)]
+                    : ['Status', 'Em andamento'],
+                ['Método de encerramento', descricaoMetodo]
+            ]);
             Swal.fire({
                 title: `Termo - Armário ${armario.numero}`,
                 html,
-                icon: 'info',
                 confirmButtonText: 'Fechar'
             });
         }
@@ -10714,22 +10929,20 @@
                 mostrarErro('Armário não encontrado para liberação.');
                 return;
             }
-            const resumoHtml = `
-                <div class="info-box" style="text-align:left;">
-                    <p><strong>Visitante:</strong> ${armario.nomeVisitante || '-'}</p>
-                    <p><strong>Paciente:</strong> ${armario.nomePaciente || '-'}</p>
-                    <p><strong>Leito:</strong> ${armario.leito || '-'}</p>
-                    <p><strong>Volumes:</strong> ${formatarVolumeParaExibicao(armario.volumes)}</p>
-                    <p><strong>Início:</strong> ${armario.horaInicio || '-'}</p>
-                    ${armario.visitaEstendida
-                        ? '<p><strong>Visita:</strong> Estendida</p>'
-                        : (armario.horaPrevista ? `<p><strong>Previsão de saída:</strong> ${armario.horaPrevista}</p>` : '')}
-                    ${armario.whatsapp ? `<p><strong>WhatsApp:</strong> ${armario.whatsapp}</p>` : ''}
-                </div>
-            `;
+            const resumoHtml = gerarLinhasResumo([
+                ['Visitante', armario.nomeVisitante || '-'],
+                ['Paciente', armario.nomePaciente || '-'],
+                ['Leito', armario.leito || '-'],
+                ['Volumes', formatarVolumeParaExibicao(armario.volumes)],
+                ['Início', armario.horaInicio || '-'],
+                armario.visitaEstendida
+                    ? ['Visita', 'Estendida']
+                    : ['Previsão de saída', armario.horaPrevista || ''],
+                ['WhatsApp', armario.whatsapp || '']
+            ]);
             const resultado = await Swal.fire({
                 title: `Encerrar armário ${armario.numero}?`,
-                html: `${resumoHtml}<p style="margin-top:12px; color:#4b5563;">Confirme que as informações estão corretas para finalizar o armário do visitante.</p>`,
+                html: `${resumoHtml}<p class="resumo-confirmacao-texto">Confirme que as informações estão corretas para finalizar o armário do visitante.</p>`,
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Confirmo a liberação',
@@ -10798,20 +11011,18 @@
                     return formatarVolumeParaExibicao(valorBruto);
                 })();
 
-                return `
-                    <div class="info-box" style="text-align:left;">
-                        <p><strong>Acompanhante:</strong> ${acompanhante}</p>
-                        <p><strong>Paciente:</strong> ${paciente}</p>
-                        ${prontuario ? `<p><strong>Prontuário:</strong> ${prontuario}</p>` : ''}
-                        ${setorLeito ? `<p><strong>Setor/Leito:</strong> ${setorLeito}</p>` : ''}
-                        <p><strong>Volumes declarados:</strong> ${volumesResumo}</p>
-                        ${inicioUso ? `<p><strong>Início:</strong> ${inicioUso}</p>` : ''}
-                        ${aplicadoEm ? `<p><strong>Aplicado em:</strong> ${aplicadoEm}</p>` : ''}
-                        ${telefone ? `<p><strong>Contato:</strong> ${telefone}</p>` : ''}
-                        ${documento ? `<p><strong>Documento:</strong> ${documento}</p>` : ''}
-                        ${parentesco ? `<p><strong>Parentesco:</strong> ${parentesco}</p>` : ''}
-                    </div>
-                `;
+                return gerarLinhasResumo([
+                    ['Acompanhante', acompanhante],
+                    ['Paciente', paciente],
+                    ['Prontuário', prontuario],
+                    ['Setor/Leito', setorLeito],
+                    ['Volumes declarados', volumesResumo],
+                    ['Início', inicioUso],
+                    ['Aplicado em', aplicadoEm],
+                    ['Contato', telefone],
+                    ['Documento', documento],
+                    ['Parentesco', parentesco]
+                ]);
             };
 
             const atualizarResumoModal = (estadoTermo = 'carregando') => {
