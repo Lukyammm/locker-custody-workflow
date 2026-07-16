@@ -2575,11 +2575,17 @@
                 skeletonCard.className = 'armario-card skeleton';
                 skeletonCard.innerHTML = `
                     <div class="armario-status-bar skeleton-block" aria-hidden="true"></div>
-                    <div class="armario-header minimal">
+                    <div class="armario-card-top">
                         <div class="armario-number skeleton-block" aria-hidden="true"></div>
                         <div class="skeleton-status" aria-hidden="true"></div>
                     </div>
-                    <div class="armario-paciente-line skeleton-line" aria-hidden="true"></div>
+                    <div class="armario-card-info">
+                        <div class="skeleton-chip" aria-hidden="true"></div>
+                    </div>
+                    <div class="armario-card-actions">
+                        <div class="skeleton-status" aria-hidden="true"></div>
+                        <div class="skeleton-status" aria-hidden="true"></div>
+                    </div>
                 `;
                 elementos.armariosContainer.appendChild(skeletonCard);
             }
@@ -4714,7 +4720,7 @@
                 if (armario.visitaEstendida) {
                     card.classList.add('visita-estendida');
                 }
-                const statusTexto = armarioEhContingencia(armario)
+                const statusTexto = classeStatus === 'contingencia'
                     ? 'Contingência'
                     : armario.status === 'livre'
                         ? 'Livre'
@@ -4724,7 +4730,7 @@
                                 ? 'Próximo'
                                 : 'Vencido';
                 const statusIcones = {
-                    livre: 'fas fa-check',
+                    livre: 'fas fa-key',
                     'em-uso': 'fas fa-user-clock',
                     proximo: 'fas fa-exclamation-triangle',
                     vencido: 'fas fa-times-circle',
@@ -4733,19 +4739,49 @@
                 const statusIcone = statusIcones[classeStatus] || 'fas fa-circle';
                 const ehLivre = classeStatus === 'livre';
                 const nomePaciente = armario.nomePaciente || '-';
+                const tipoLabel = normalizarTexto(armario.tipo) === 'acompanhante' ? 'Acompanhante' : 'Visitante';
+                const subLinha = classeStatus === 'contingencia'
+                    ? 'Acesso de contingência'
+                    : ehLivre
+                        ? 'Pronto para uso'
+                        : `${tipoLabel}${armario.horaInicio ? ` • desde ${armario.horaInicio}` : ''}`;
+                const rotuloPrimario = ehLivre ? 'Abrir agora' : 'Liberar';
                 card.innerHTML = `
-                    <div class="armario-status-bar status-${classeStatus}" aria-hidden="true"></div>
-                    <div class="armario-header minimal">
-                        <div class="armario-identificacao">
-                            <span class="armario-number prominent">${armario.numero}</span>
+                    <div class="armario-status-bar" aria-hidden="true"></div>
+                    <div class="armario-card-top">
+                        <span class="armario-number prominent">${armario.numero}</span>
+                        <span class="armario-status-pill">
+                            <span class="armario-status-dot" aria-hidden="true"></span>${statusTexto}
+                        </span>
+                    </div>
+                    <div class="armario-card-info">
+                        <div class="armario-status-icon status-${classeStatus}" aria-hidden="true">
+                            <i class="${statusIcone}"></i>
                         </div>
-                        <div class="armario-status-icon status-${classeStatus}" aria-label="${statusTexto}">
-                            <i class="${statusIcone}" aria-hidden="true"></i>
-                            <span class="sr-only">${statusTexto}</span>
+                        <div class="armario-card-textos">
+                            <span class="armario-card-nome" title="${ehLivre ? statusTexto : nomePaciente}">${ehLivre ? 'Disponível' : nomePaciente}</span>
+                            <span class="armario-card-sub">${subLinha}</span>
                         </div>
                     </div>
-                    ${ehLivre ? '' : `<div class="armario-paciente-line" title="${nomePaciente}">${nomePaciente}</div>`}
+                    <div class="armario-card-actions">
+                        <button type="button" class="armario-card-btn consultar" data-acao="consultar" aria-label="Consultar armário ${armario.numero}">Consultar</button>
+                        <button type="button" class="armario-card-btn abrir" data-acao="abrir" aria-label="${rotuloPrimario} armário ${armario.numero}">${rotuloPrimario}</button>
+                    </div>
                 `;
+                const botaoConsultar = card.querySelector('[data-acao="consultar"]');
+                const botaoAbrir = card.querySelector('[data-acao="abrir"]');
+                if (botaoConsultar) {
+                    botaoConsultar.addEventListener('click', event => {
+                        event.stopPropagation();
+                        abrirConsultaArmario(armario);
+                    });
+                }
+                if (botaoAbrir) {
+                    botaoAbrir.addEventListener('click', event => {
+                        event.stopPropagation();
+                        executarAcaoPrimariaArmario(armario);
+                    });
+                }
                 card.addEventListener('click', () => abrirModalArmario(armario));
                 return card;
             };
@@ -4829,6 +4865,15 @@
                     return;
                 }
 
+                // Contingências são identificadas como os cards do Monitor (flag,
+                // número ou status) e as livres ficam de fora, como na listagem.
+                if (armarioEhContingencia(armario)) {
+                    if (normalizarTexto(armario.status) !== 'livre') {
+                        totais.contingencia += 1;
+                    }
+                    return;
+                }
+
                 switch (armario.status) {
                     case 'livre':
                         totais.livres += 1;
@@ -4838,9 +4883,6 @@
                         break;
                     case 'proximo':
                         totais.proximo += 1;
-                        break;
-                    case 'contingencia':
-                        totais.contingencia += 1;
                         break;
                     case 'vencido':
                         totais.vencidos += 1;
@@ -6622,6 +6664,73 @@
                 }
             }
         }
+        // Consulta rápida a partir do card do Monitor: para armários livres mostra
+        // um resumo simples; para ocupados abre o modal completo de detalhes.
+        function abrirConsultaArmario(armario) {
+            if (!armario) return;
+            if (normalizarTexto(armario.status) === 'livre' && !armarioEhContingencia(armario)) {
+                const tipoLabel = normalizarTexto(armario.tipo) === 'acompanhante' ? 'Acompanhante' : 'Visitante';
+                Swal.fire({
+                    html: `
+                        <div class="armario-modal-card consulta-livre">
+                            <header class="armario-modal-header">
+                                <div class="armario-modal-hero">
+                                    <div class="armario-modal-icon livre">
+                                        <i class="fas fa-key" aria-hidden="true"></i>
+                                    </div>
+                                    <div>
+                                        <div class="armario-modal-eyebrow">${tipoLabel}</div>
+                                        <h2 class="armario-modal-title">Armário ${armario.numero}</h2>
+                                        <p class="armario-modal-subtitle">${armario.unidade || '-'}</p>
+                                    </div>
+                                </div>
+                                <span class="armario-modal-status status-livre">
+                                    <span class="armario-modal-status-dot" aria-hidden="true"></span>
+                                    Livre
+                                </span>
+                            </header>
+                            <div class="armario-modal-section">
+                                <p class="armario-modal-consulta-texto">
+                                    Este armário está disponível. Use <strong>Abrir agora</strong> para iniciar um novo cadastro.
+                                </p>
+                            </div>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: 'Abrir agora',
+                    cancelButtonText: 'Fechar',
+                    reverseButtons: true,
+                    buttonsStyling: false,
+                    customClass: {
+                        popup: 'armario-modal-popup',
+                        confirmButton: 'armario-modal-primary',
+                        cancelButton: 'armario-modal-tertiary'
+                    }
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        abrirModalArmario(armario);
+                    }
+                });
+                return;
+            }
+            abrirModalArmario(armario);
+        }
+
+        // Ação primária do card: livre abre o fluxo de cadastro/termo;
+        // ocupado (inclusive contingência) vai direto para a liberação.
+        function executarAcaoPrimariaArmario(armario) {
+            if (!armario) return;
+            if (normalizarTexto(armario.status) === 'livre' && !armarioEhContingencia(armario)) {
+                abrirModalArmario(armario);
+                return;
+            }
+            if (normalizarTexto(armario.tipo) === 'visitante') {
+                confirmarLiberacaoVisitante(armario.id);
+            } else {
+                confirmarLiberacaoAcompanhante(armario.id);
+            }
+        }
+
         function abrirModalArmario(armario) {
             garantirPortaisCabecalho();
             if (armario.status === 'livre') {
@@ -6815,14 +6924,13 @@
                             ${armario.tipo === 'acompanhante' && termoPendente ? `<div class="armario-modal-actions"><button id="btn-aplicar-termo" class="armario-modal-primary-inline" type="button">Aplicar termo agora</button></div>` : ''}
                         </div>
                     `,
-                    icon: 'info',
                     showCancelButton: true,
                     showDenyButton: armario.tipo === 'acompanhante',
                     confirmButtonText: 'Liberar Armário',
                     denyButtonText: 'Movimentações',
                     cancelButtonText: 'Fechar',
-                    confirmButtonColor: '#28a745',
                     reverseButtons: true,
+                    buttonsStyling: false,
                     customClass: {
                         popup: 'armario-modal-popup',
                         confirmButton: 'armario-modal-primary',
