@@ -656,7 +656,6 @@
             color: var(--text-color);
             display: flex;
             min-height: 100vh;
-            overflow-x: hidden;
         }
         body.nav-open {
             overflow: hidden;
@@ -7464,4 +7463,242 @@
                 scroll-behavior: auto !important;
             }
         }
+
+        /* --- REDESIGN PREMIUM V2 --- */
+        body, .main-content {
+            background-color: #F3F6F9;
+        }
+
+        .search-hero-premium {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-4);
+            margin-bottom: var(--space-6);
+            width: 100%;
+            padding: 0 var(--space-4);
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            flex-grow: 1;
+            max-width: 700px;
+            display: flex;
+            align-items: center;
+            background: #FFFFFF;
+            border-radius: 20px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: box-shadow 0.3s ease, border-color 0.3s ease;
+            padding: var(--space-3) var(--space-4);
+        }
+
+        .search-input-wrapper:focus-within {
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.12);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .search-icon {
+            font-size: 1.4rem;
+            color: var(--primary-color);
+            margin-right: var(--space-3);
+        }
+
+        .search-input-wrapper input {
+            border: none;
+            background: transparent;
+            font-size: 1.15rem;
+            width: 100%;
+            color: var(--text-color);
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+        }
+
+        .btn-contingencia-premium {
+            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+            color: white;
+            border: none;
+            border-radius: 16px;
+            padding: 0 var(--space-5);
+            height: 56px;
+            font-size: 1rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.25);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-contingencia-premium:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(124, 58, 237, 0.35);
+        }
+
+        .cards-hero.compact-hero {
+            display: flex;
+            gap: var(--space-3);
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: var(--space-6);
+        }
+
+        .compact-hero .card {
+            display: flex;
+            align-items: center;
+            padding: var(--space-2) var(--space-4);
+            border-radius: 100px;
+            gap: var(--space-3);
+            background: #FFFFFF;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.04);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            min-width: unset;
+        }
+
+        .compact-hero .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        .compact-hero .card-icon {
+            font-size: 1.1rem;
+        }
+
+        .compact-hero .card-content {
+            display: flex;
+            align-items: baseline;
+            gap: var(--space-2);
+        }
+
+        .compact-hero .card-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .compact-hero .card-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--muted-color);
+            text-transform: uppercase;
+        }
+
+        .compact-hero .card.livre .card-icon { color: var(--status-livre); }
+        .compact-hero .card.em-uso .card-icon { color: var(--status-em-uso); }
+        .compact-hero .card.proximo .card-icon { color: var(--status-proximo); }
+        .compact-hero .card.vencido .card-icon { color: var(--status-vencido); }
+        .compact-hero .card.contingencia .card-icon { color: var(--status-contingencia); }
+
+        .resumo-panels-container {
+            display: flex;
+            gap: var(--space-5);
+            flex-wrap: wrap;
+            margin-bottom: var(--space-6);
+        }
+
+        .resumo-panel {
+            flex: 1;
+            min-width: 320px;
+            background: #FFFFFF;
+            border-radius: 24px;
+            padding: var(--space-5);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.03);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            padding-bottom: var(--space-3);
+        }
+
+        .panel-header h3 {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .panel-header h3 i {
+            color: var(--primary-color);
+            opacity: 0.8;
+        }
+
+        .panel-badge {
+            background: var(--bg-color);
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-color);
+        }
+        .panel-badge.success {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+
+        .panel-footer {
+            text-align: center;
+            margin-top: auto;
+            padding-top: var(--space-3);
+        }
+
+        .panel-hint {
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--muted-color);
+            font-weight: 500;
+        }
+
+        .resumo-panel .armarios-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: var(--space-3);
+        }
+
+        @media (min-width: 1200px) {
+            .resumo-panel .armarios-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .armarios-grid-wrapper {
+            background: #FFFFFF;
+            border-radius: 24px;
+            padding: var(--space-5);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.03);
+        }
+
+        /* Upgrade Visual nos Cards dos Armários */
+        .armario-card {
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border-radius: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .armario-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        }
+
+        .armario-card.livre { background-color: #f0fdf4; }
+        .armario-card.em-uso { background-color: #eff6ff; }
+        .armario-card.proximo { background-color: #fffbeb; }
+        .armario-card.vencido { background-color: #fef2f2; }
+        .armario-card.contingencia { background-color: #f3e8ff; }
     </style>
