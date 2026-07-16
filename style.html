@@ -656,7 +656,6 @@
             color: var(--text-color);
             display: flex;
             min-height: 100vh;
-            overflow-x: hidden;
         }
         body.nav-open {
             overflow: hidden;
@@ -665,6 +664,15 @@
         html, body, .app-shell, .main-content, #pages-container, .page {
             width: 100%;
             max-width: 100%;
+        }
+        /* overflow-x aqui (não em body): quando um elemento tem só um eixo
+           não-visible, o outro é promovido para "auto" pela spec CSS — e se
+           fosse o body a ficar com eixo misto, esse overflow se propagaria
+           para o viewport (o html está "visible"), quebrando/travando o
+           scroll real da página no mobile. Deixando em html, é ele mesmo
+           quem já rege o viewport, sem propagação nem duplo scroller. */
+        html {
+            overflow-x: hidden;
         }
         body.modal-open {
             overflow: hidden;
@@ -907,6 +915,7 @@
             padding: 20px;
             transition: margin-left 0.3s;
             overflow-x: hidden;
+            overflow-y: hidden;
         }
         /* Header */
         .header {
