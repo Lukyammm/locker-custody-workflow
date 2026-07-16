@@ -1294,6 +1294,106 @@
         }
         function aprimorarSeletoresCabecalho() {
             document.querySelectorAll('.selector-control .selector-input').forEach(select => criarSelectorPersonalizado(select));
+            inicializarPillContexto();
+            inicializarTooltipsRail();
+        }
+        // Pill de contexto do header: espelha os selects de perfil/unidade e
+        // controla o popover que contém os dois seletores.
+        function atualizarPillContexto() {
+            const perfilSelect = document.getElementById('profile-select');
+            const unidadeSelect = document.getElementById('unit-select');
+            const alvoPerfil = document.getElementById('context-pill-profile');
+            const alvoUnidade = document.getElementById('context-pill-unit');
+            if (alvoPerfil && perfilSelect) {
+                alvoPerfil.textContent = perfilSelect.options[perfilSelect.selectedIndex]?.textContent || 'Perfil geral';
+            }
+            if (alvoUnidade && unidadeSelect) {
+                alvoUnidade.textContent = unidadeSelect.options[unidadeSelect.selectedIndex]?.textContent || 'Todas as unidades';
+            }
+        }
+        let pillContextoInicializada = false;
+        function inicializarPillContexto() {
+            if (pillContextoInicializada) {
+                atualizarPillContexto();
+                return;
+            }
+            const wrap = document.querySelector('.header-context');
+            const pill = document.getElementById('context-pill');
+            if (!wrap || !pill) return;
+            pillContextoInicializada = true;
+            const fechar = () => {
+                wrap.classList.remove('open');
+                pill.setAttribute('aria-expanded', 'false');
+            };
+            pill.addEventListener('click', () => {
+                const aberto = wrap.classList.toggle('open');
+                pill.setAttribute('aria-expanded', String(aberto));
+            });
+            document.addEventListener('click', event => {
+                if (!wrap.contains(event.target)) fechar();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && wrap.classList.contains('open')) {
+                    fechar();
+                    pill.focus();
+                }
+            });
+            ['profile-select', 'unit-select'].forEach(id => {
+                document.getElementById(id)?.addEventListener('change', atualizarPillContexto);
+            });
+            atualizarPillContexto();
+        }
+        // Steppers dos wizards: acendem os marcos conforme o rótulo
+        // "Passo X de Y" muda (a lógica dos wizards permanece intocada).
+        function inicializarSteppers() {
+            document.querySelectorAll('.wizard-stepper[data-progress-label]').forEach(stepperEl => {
+                if (stepperEl.dataset.stepperInicializado) return;
+                const label = document.getElementById(stepperEl.dataset.progressLabel);
+                if (!label) return;
+                stepperEl.dataset.stepperInicializado = 'true';
+                const aplicar = () => {
+                    const correspondencia = (label.textContent || '').match(/(\d+)\s*de\s*(\d+)/);
+                    if (!correspondencia) return;
+                    const atual = Number(correspondencia[1]);
+                    stepperEl.querySelectorAll('.wizard-stepper-step').forEach(step => {
+                        const indice = Number(step.dataset.index);
+                        step.classList.toggle('is-done', indice < atual);
+                        step.classList.toggle('is-active', indice === atual);
+                    });
+                };
+                new MutationObserver(aplicar).observe(label, { childList: true, characterData: true, subtree: true });
+                aplicar();
+            });
+        }
+        // Tooltip flutuante do rail (elemento único no body — o rail tem
+        // overflow-y:auto e clipparia pseudo-elementos posicionados).
+        let railTooltipEl = null;
+        function inicializarTooltipsRail() {
+            if (railTooltipEl || window.matchMedia('(hover: none)').matches) return;
+            const alvos = document.querySelectorAll('.sidebar [data-tooltip]');
+            if (!alvos.length) return;
+            railTooltipEl = document.createElement('div');
+            railTooltipEl.className = 'rail-tooltip';
+            railTooltipEl.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(railTooltipEl);
+            const mostrar = alvo => {
+                if (window.matchMedia('(max-width: 1024px)').matches) return;
+                const texto = alvo.getAttribute('data-tooltip');
+                if (!texto) return;
+                railTooltipEl.textContent = texto;
+                const rect = alvo.getBoundingClientRect();
+                railTooltipEl.style.left = `${Math.round(rect.right + 10)}px`;
+                railTooltipEl.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
+                railTooltipEl.style.transform = 'translateY(-50%)';
+                railTooltipEl.classList.add('visible');
+            };
+            const esconder = () => railTooltipEl.classList.remove('visible');
+            alvos.forEach(alvo => {
+                alvo.addEventListener('mouseenter', () => mostrar(alvo));
+                alvo.addEventListener('mouseleave', esconder);
+                alvo.addEventListener('focus', () => mostrar(alvo));
+                alvo.addEventListener('blur', esconder);
+            });
         }
         function criarSelectorPersonalizado(select) {
             if (!select) return;
@@ -1423,6 +1523,7 @@
                 button.classList.toggle('is-selected', Boolean(isSelected));
                 button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             });
+            atualizarPillContexto();
         }
         function toggleSelectorDropdown(instance, forceState) {
             const { control, trigger } = instance;
@@ -2340,6 +2441,7 @@
             aplicarPreferenciasCabecalhoRestauradas();
             atualizarInterface();
             aprimorarSeletoresCabecalho();
+            inicializarSteppers();
             inicializarCanvasAssinatura();
             inicializarEventos();
             await carregarDadosIniciais();
@@ -6501,6 +6603,7 @@
             atualizarSelectorPersonalizado(elementos.unitSelect);
             salvarPreferenciasCabecalho();
             atualizarFiltroUnidadeTermos();
+            atualizarPillContexto();
         }
         function renderizarTabelaUnidades() {
             if (!elementos.tabelaUnidadesBody) return;
@@ -8044,6 +8147,18 @@
                 return numero > 0 ? numero : minimo;
             }
             return valorNormalizado || minimo;
+        }
+        // Gera resumo em linhas rótulo/valor para modais Swal.
+        // Pares com valor vazio/nulo são omitidos.
+        function gerarLinhasResumo(pares) {
+            const linhas = (pares || [])
+                .filter(par => Array.isArray(par) && par[1] !== null && par[1] !== undefined && String(par[1]).trim() !== '')
+                .map(([rotulo, valor]) => `
+                    <div class="resumo-row">
+                        <span class="resumo-label">${rotulo}</span>
+                        <span class="resumo-value">${valor}</span>
+                    </div>`).join('');
+            return `<div class="resumo-list">${linhas}</div>`;
         }
         function formatarVolumeParaExibicao(valor, minimo = 1) {
             const volumeNormalizado = aplicarMinimoVolumes(valor, minimo);
@@ -10768,35 +10883,35 @@
             }
             const termo = resultado.data;
             const metodoFinalNormalizado = normalizarTexto(termo.metodoFinal);
-            let metodoEncerramentoHtml = '';
+            let descricaoMetodo = '';
             if (termo.metodoFinal) {
-                let descricaoMetodo = 'Assinatura digital';
+                descricaoMetodo = 'Assinatura digital';
                 if (metodoFinalNormalizado === 'cpf') {
                     descricaoMetodo = `Confirmação por CPF (${termo.cpfConfirmacao || ''})`;
                 } else if (metodoFinalNormalizado === 'manual') {
                     descricaoMetodo = 'Finalização manual (sem assinatura digital)';
                 }
-                metodoEncerramentoHtml = `<p><strong>Método de encerramento:</strong> ${descricaoMetodo}</p>`;
             }
 
-            const html = `
-                <p><strong>Paciente:</strong> ${termo.paciente}</p>
-                <p><strong>Prontuário:</strong> ${termo.prontuario}</p>
-                <p><strong>Setor:</strong> ${termo.setor}</p>
-                <p><strong>Leito:</strong> ${termo.leito}</p>
-                <p><strong>Acompanhante:</strong> ${termo.acompanhante}</p>
-                ${termo.telefone ? `<p><strong>Telefone:</strong> ${termo.telefone}</p>` : ''}
-                ${termo.documento ? `<p><strong>Documento:</strong> ${termo.documento}</p>` : ''}
-                ${termo.parentesco ? `<p><strong>Parentesco:</strong> ${termo.parentesco}</p>` : ''}
-                <p><strong>Volumes:</strong> ${termo.descricaoVolumes}</p>
-                <p><strong>Aplicado em:</strong> ${formatarDataHora(termo.aplicadoEm)}</p>
-                ${termo.finalizadoEm ? `<p><strong>Finalizado em:</strong> ${formatarDataHora(termo.finalizadoEm)}</p>` : '<p><strong>Status:</strong> Em andamento</p>'}
-                ${metodoEncerramentoHtml}
-            `;
+            const html = gerarLinhasResumo([
+                ['Paciente', termo.paciente],
+                ['Prontuário', termo.prontuario],
+                ['Setor', termo.setor],
+                ['Leito', termo.leito],
+                ['Acompanhante', termo.acompanhante],
+                ['Telefone', termo.telefone],
+                ['Documento', termo.documento],
+                ['Parentesco', termo.parentesco],
+                ['Volumes', termo.descricaoVolumes],
+                ['Aplicado em', formatarDataHora(termo.aplicadoEm)],
+                termo.finalizadoEm
+                    ? ['Finalizado em', formatarDataHora(termo.finalizadoEm)]
+                    : ['Status', 'Em andamento'],
+                ['Método de encerramento', descricaoMetodo]
+            ]);
             Swal.fire({
                 title: `Termo - Armário ${armario.numero}`,
                 html,
-                icon: 'info',
                 confirmButtonText: 'Fechar'
             });
         }
@@ -10814,22 +10929,20 @@
                 mostrarErro('Armário não encontrado para liberação.');
                 return;
             }
-            const resumoHtml = `
-                <div class="info-box" style="text-align:left;">
-                    <p><strong>Visitante:</strong> ${armario.nomeVisitante || '-'}</p>
-                    <p><strong>Paciente:</strong> ${armario.nomePaciente || '-'}</p>
-                    <p><strong>Leito:</strong> ${armario.leito || '-'}</p>
-                    <p><strong>Volumes:</strong> ${formatarVolumeParaExibicao(armario.volumes)}</p>
-                    <p><strong>Início:</strong> ${armario.horaInicio || '-'}</p>
-                    ${armario.visitaEstendida
-                        ? '<p><strong>Visita:</strong> Estendida</p>'
-                        : (armario.horaPrevista ? `<p><strong>Previsão de saída:</strong> ${armario.horaPrevista}</p>` : '')}
-                    ${armario.whatsapp ? `<p><strong>WhatsApp:</strong> ${armario.whatsapp}</p>` : ''}
-                </div>
-            `;
+            const resumoHtml = gerarLinhasResumo([
+                ['Visitante', armario.nomeVisitante || '-'],
+                ['Paciente', armario.nomePaciente || '-'],
+                ['Leito', armario.leito || '-'],
+                ['Volumes', formatarVolumeParaExibicao(armario.volumes)],
+                ['Início', armario.horaInicio || '-'],
+                armario.visitaEstendida
+                    ? ['Visita', 'Estendida']
+                    : ['Previsão de saída', armario.horaPrevista || ''],
+                ['WhatsApp', armario.whatsapp || '']
+            ]);
             const resultado = await Swal.fire({
                 title: `Encerrar armário ${armario.numero}?`,
-                html: `${resumoHtml}<p style="margin-top:12px; color:#4b5563;">Confirme que as informações estão corretas para finalizar o armário do visitante.</p>`,
+                html: `${resumoHtml}<p class="resumo-confirmacao-texto">Confirme que as informações estão corretas para finalizar o armário do visitante.</p>`,
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Confirmo a liberação',
@@ -10898,20 +11011,18 @@
                     return formatarVolumeParaExibicao(valorBruto);
                 })();
 
-                return `
-                    <div class="info-box" style="text-align:left;">
-                        <p><strong>Acompanhante:</strong> ${acompanhante}</p>
-                        <p><strong>Paciente:</strong> ${paciente}</p>
-                        ${prontuario ? `<p><strong>Prontuário:</strong> ${prontuario}</p>` : ''}
-                        ${setorLeito ? `<p><strong>Setor/Leito:</strong> ${setorLeito}</p>` : ''}
-                        <p><strong>Volumes declarados:</strong> ${volumesResumo}</p>
-                        ${inicioUso ? `<p><strong>Início:</strong> ${inicioUso}</p>` : ''}
-                        ${aplicadoEm ? `<p><strong>Aplicado em:</strong> ${aplicadoEm}</p>` : ''}
-                        ${telefone ? `<p><strong>Contato:</strong> ${telefone}</p>` : ''}
-                        ${documento ? `<p><strong>Documento:</strong> ${documento}</p>` : ''}
-                        ${parentesco ? `<p><strong>Parentesco:</strong> ${parentesco}</p>` : ''}
-                    </div>
-                `;
+                return gerarLinhasResumo([
+                    ['Acompanhante', acompanhante],
+                    ['Paciente', paciente],
+                    ['Prontuário', prontuario],
+                    ['Setor/Leito', setorLeito],
+                    ['Volumes declarados', volumesResumo],
+                    ['Início', inicioUso],
+                    ['Aplicado em', aplicadoEm],
+                    ['Contato', telefone],
+                    ['Documento', documento],
+                    ['Parentesco', parentesco]
+                ]);
             };
 
             const atualizarResumoModal = (estadoTermo = 'carregando') => {

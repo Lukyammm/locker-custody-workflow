@@ -79,24 +79,43 @@
             </div>
             <nav class="sidebar-menu">
                 <ul>
-                    <li><a href="#" class="active" data-page="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Monitor</span></a></li>
-                    <li><a href="#" data-page="visitantes"><i class="fas fa-user-clock"></i> <span>Visitantes</span></a></li>
-                    <li><a href="#" data-page="acompanhantes"><i class="fas fa-user-friends"></i> <span>Acompanhantes</span></a></li>
-                    <li><a href="#" data-page="historico-visitantes"><i class="fas fa-history"></i> <span>Histórico Visitantes</span></a></li>
-                    <li><a href="#" data-page="historico-acompanhantes"><i class="fas fa-history"></i> <span>Histórico Acompanhantes</span></a></li>
-                    <li><a href="#" data-page="liberacao"><i class="fas fa-table"></i> <span>Liberações</span></a></li>
-                    <li><a href="#" data-page="achados-perdidos"><i class="fas fa-magnifying-glass-location"></i> <span>Achados e Perdidos</span></a></li>
-                    <li><a href="#" data-page="termo-responsabilidade"><i class="fas fa-file-signature"></i> <span>Termo de Responsabilidade</span></a></li>
-                    <li><a href="#" data-page="cadastro-armarios"><i class="fas fa-archive"></i> <span>Cadastro de Armários</span></a></li>
-                    <li><a href="#" data-page="cadastro-unidades"><i class="fas fa-hospital"></i> <span>Cadastro de Unidades</span></a></li>
-                    <li><a href="#" data-page="usuarios"><i class="fas fa-users"></i> <span>Usuários</span></a></li>
-                    <li><a href="#" data-page="logs"><i class="fas fa-clipboard-list"></i> <span>LOGS</span></a></li>
-                    <li><a href="#" data-page="registros-imagens"><i class="fas fa-images"></i> <span>Registros de Imagens</span></a></li>
-                    <li><a href="#" data-page="backup"><i class="fas fa-box-archive"></i> <span>Backup</span></a></li>
+                    <li class="sidebar-group"><span class="sidebar-group-label">Operação</span></li>
+                    <li><a href="#" class="active" data-page="dashboard" data-tooltip="Monitor"><i class="fas fa-tachometer-alt"></i> <span>Monitor</span></a></li>
+                    <li><a href="#" data-page="visitantes" data-tooltip="Visitantes"><i class="fas fa-user-clock"></i> <span>Visitantes</span></a></li>
+                    <li><a href="#" data-page="acompanhantes" data-tooltip="Acompanhantes"><i class="fas fa-user-friends"></i> <span>Acompanhantes</span></a></li>
+                    <li><a href="#" data-page="liberacao" data-tooltip="Liberações"><i class="fas fa-table"></i> <span>Liberações</span></a></li>
+                    <li class="sidebar-group"><span class="sidebar-group-label">Registros</span></li>
+                    <li><a href="#" data-page="historico-visitantes" data-tooltip="Histórico Visitantes"><i class="fas fa-history"></i> <span>Histórico Visitantes</span></a></li>
+                    <li><a href="#" data-page="historico-acompanhantes" data-tooltip="Histórico Acompanhantes"><i class="fas fa-clock-rotate-left"></i> <span>Histórico Acompanhantes</span></a></li>
+                    <li><a href="#" data-page="achados-perdidos" data-tooltip="Achados e Perdidos"><i class="fas fa-magnifying-glass-location"></i> <span>Achados e Perdidos</span></a></li>
+                    <li><a href="#" data-page="termo-responsabilidade" data-tooltip="Termo de Responsabilidade"><i class="fas fa-file-signature"></i> <span>Termo de Responsabilidade</span></a></li>
+                    <li><a href="#" data-page="registros-imagens" data-tooltip="Registros de Imagens"><i class="fas fa-images"></i> <span>Registros de Imagens</span></a></li>
+                    <li class="sidebar-group"><span class="sidebar-group-label">Administração</span></li>
+                    <li><a href="#" data-page="cadastro-armarios" data-tooltip="Cadastro de Armários"><i class="fas fa-archive"></i> <span>Cadastro de Armários</span></a></li>
+                    <li><a href="#" data-page="cadastro-unidades" data-tooltip="Cadastro de Unidades"><i class="fas fa-hospital"></i> <span>Cadastro de Unidades</span></a></li>
+                    <li><a href="#" data-page="usuarios" data-tooltip="Usuários"><i class="fas fa-users"></i> <span>Usuários</span></a></li>
+                    <li><a href="#" data-page="logs" data-tooltip="LOGS"><i class="fas fa-clipboard-list"></i> <span>LOGS</span></a></li>
+                    <li><a href="#" data-page="backup" data-tooltip="Backup"><i class="fas fa-box-archive"></i> <span>Backup</span></a></li>
                 </ul>
             </nav>
             <div class="sidebar-footer">
-                <button type="button" id="logout-button" class="sidebar-logout-button">
+                <button type="button" class="theme-toggle rail-action" id="theme-toggle" data-tooltip="Alternar tema" aria-label="Ativar tema escuro" aria-pressed="false">
+                    <i class="fas fa-moon" aria-hidden="true"></i>
+                    <span class="rail-action-label">Tema</span>
+                </button>
+                <div class="notification-bell rail-action" id="notification-bell" data-tooltip="Notificações" aria-label="Notificações" tabindex="0">
+                    <i class="fas fa-bell" aria-hidden="true"></i>
+                    <span class="notification-badge">0</span>
+                    <span class="rail-action-label">Notificações</span>
+                </div>
+                <div class="user-profile rail-action" id="header-user-profile" data-tooltip="Meu perfil" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="avatar-modal" aria-expanded="false">
+                    <div class="user-avatar" id="header-user-avatar">--</div>
+                    <div class="user-details" aria-hidden="true">
+                        <strong id="header-user-name">Usuário</strong>
+                        <span id="header-user-role">Perfil geral</span>
+                    </div>
+                </div>
+                <button type="button" id="logout-button" class="sidebar-logout-button" data-tooltip="Sair">
                     <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
                     <span>Sair</span>
                 </button>
@@ -118,13 +137,22 @@
                         <span class="greeting-shift" id="header-user-greeting-shift">MT</span>
                     </div>
                 </div>
-                <div class="header-quick-actions">
-                    <div class="header-actions">
-                        <div class="header-selector-pair" aria-label="Filtros de perfil e unidade">
-                            <div class="selector-group compact">
-                                <label for="profile-select" class="sr-only">Perfil</label>
-                                <div class="selector-control compact" data-selector>
-                                    <button type="button" class="selector-trigger" id="profile-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Perfil">
+                <div class="header-context">
+                    <button type="button" class="context-pill" id="context-pill" aria-haspopup="dialog" aria-expanded="false" aria-controls="context-popover" aria-label="Contexto de visualização">
+                        <i class="fas fa-sliders" aria-hidden="true"></i>
+                        <span class="context-pill-text">
+                            <span class="context-pill-part" id="context-pill-profile">Perfil geral</span>
+                            <span class="context-pill-sep" aria-hidden="true">·</span>
+                            <span class="context-pill-part" id="context-pill-unit">Todas as unidades</span>
+                        </span>
+                        <i class="fas fa-angle-down context-pill-arrow" aria-hidden="true"></i>
+                    </button>
+                    <div class="context-popover" id="context-popover" role="dialog" aria-label="Contexto de visualização">
+                        <div class="context-popover-header">Contexto de visualização</div>
+                        <div class="selector-group">
+                            <label for="profile-select" class="context-section-label">Perfil</label>
+                            <div class="selector-control" data-selector>
+                                <button type="button" class="selector-trigger" id="profile-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Perfil">
                                     <i class="fas fa-users selector-icon" aria-hidden="true"></i>
                                     <div class="selector-trigger-text">
                                         <span class="selector-trigger-label">Perfil geral</span>
@@ -139,44 +167,27 @@
                                     <option value="acompanhante" data-icon="fas fa-people-roof" data-description="Acompanhamento dedicado aos pacientes">Acompanhantes</option>
                                 </select>
                             </div>
-                            <div class="selector-group compact">
-                                <label for="unit-select" class="sr-only">Unidade</label>
-                                <div class="selector-control compact" data-selector>
-                                    <button type="button" class="selector-trigger" id="unit-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Unidade">
-                                        <i class="fas fa-building selector-icon" aria-hidden="true"></i>
-                                        <div class="selector-trigger-text">
-                                            <span class="selector-trigger-label">Todas as unidades</span>
-                                            <span class="selector-trigger-description">Visualização geral por setor</span>
-                                        </div>
-                                        <span class="selector-arrow" aria-hidden="true"><i class="fas fa-angle-down"></i></span>
-                                    </button>
-                                    <div class="selector-dropdown" role="listbox" aria-labelledby="unit-select-trigger"></div>
-                                    <select id="unit-select" class="selector-input" aria-hidden="true" tabindex="-1">
-                                        <option value="todas" data-icon="fas fa-layer-group" data-description="Visualização geral por setor">Todas as unidades</option>
-                                    </select>
-                                </div>
-                            </div>
                         </div>
-                        <div class="header-icon-actions">
-                            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Ativar tema claro" aria-pressed="true">
-                                <i class="fas fa-futbol" aria-hidden="true"></i>
-                            </button>
-                            <div class="notification-bell" id="notification-bell" aria-label="Notificações" tabindex="0">
-                                <i class="fas fa-bell" aria-hidden="true"></i>
-                                <span class="notification-badge">0</span>
-                            </div>
-                            <div class="user-profile" id="header-user-profile" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="avatar-modal" aria-expanded="false">
-                                <div class="user-avatar" id="header-user-avatar">--</div>
-                                <div class="user-details" aria-hidden="true">
-                                    <strong id="header-user-name">Usuário</strong>
-                                    <span id="header-user-role">Perfil geral</span>
-                                </div>
+                        <div class="selector-group">
+                            <label for="unit-select" class="context-section-label">Unidade</label>
+                            <div class="selector-control" data-selector>
+                                <button type="button" class="selector-trigger" id="unit-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Unidade">
+                                    <i class="fas fa-building selector-icon" aria-hidden="true"></i>
+                                    <div class="selector-trigger-text">
+                                        <span class="selector-trigger-label">Todas as unidades</span>
+                                        <span class="selector-trigger-description">Visualização geral por setor</span>
+                                    </div>
+                                    <span class="selector-arrow" aria-hidden="true"><i class="fas fa-angle-down"></i></span>
+                                </button>
+                                <div class="selector-dropdown" role="listbox" aria-labelledby="unit-select-trigger"></div>
+                                <select id="unit-select" class="selector-input" aria-hidden="true" tabindex="-1">
+                                    <option value="todas" data-icon="fas fa-layer-group" data-description="Visualização geral por setor">Todas as unidades</option>
+                                </select>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
         <!-- Páginas -->
         <div id="pages-container">
             <!-- Monitor -->
@@ -816,65 +827,94 @@
     <div class="modal" id="armario-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title" id="modal-title">Cadastrar Armário</div>
+                <span class="modal-header-icon" aria-hidden="true"><i class="fas fa-box-archive"></i></span>
+                <div class="modal-header-text">
+                    <div class="modal-title" id="modal-title">Cadastrar Armário</div>
+                    <div class="modal-subtitle">Guarda de pertences no armário selecionado</div>
+                </div>
                 <button class="modal-close" id="modal-close">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="armario-form">
-                    <div class="form-group prontuario-search">
-                        <div class="prontuario-search-header">
-                            <label for="prontuario-busca">Pesquisar prontuário <span class="tag-opcional">Opcional</span></label>
-                            <div class="prontuario-search-actions">
-                                <div class="prontuario-input-group">
-                                    <input type="text" id="prontuario-busca" class="form-control" inputmode="numeric" autocomplete="off" placeholder="Digite o prontuário do paciente">
-                                    <button type="button" class="btn btn-primary" id="btn-buscar-prontuario">
-                                        <i class="fas fa-search"></i>
-                                        Buscar
-                                    </button>
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-hospital-user"></i></span>
+                            <span class="form-section-title">Paciente</span>
+                            <span class="form-section-hint">Busque pelo prontuário para preencher automaticamente</span>
+                        </div>
+                        <div class="form-group prontuario-search span-2">
+                            <div class="prontuario-search-header">
+                                <label for="prontuario-busca">Pesquisar prontuário <span class="tag-opcional">Opcional</span></label>
+                                <div class="prontuario-search-actions">
+                                    <div class="prontuario-input-group">
+                                        <input type="text" id="prontuario-busca" class="form-control" inputmode="numeric" autocomplete="off" placeholder="Digite o prontuário do paciente">
+                                        <button type="button" class="btn btn-primary" id="btn-buscar-prontuario">
+                                            <i class="fas fa-search"></i>
+                                            Buscar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="search-feedback" id="prontuario-busca-feedback" role="status" aria-live="polite"></div>
+                        </div>
+                        <div class="form-section-grid">
+                            <div class="form-group span-2">
+                                <label for="nome-paciente">Nome do Paciente</label>
+                                <input type="text" id="nome-paciente" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="prontuario">Prontuário <span class="tag-opcional">Opcional</span></label>
+                                <input type="text" id="prontuario" class="form-control" inputmode="numeric" autocomplete="off" placeholder="Número do prontuário">
+                            </div>
+                            <div class="form-group">
+                                <label for="leito">Leito</label>
+                                <input type="text" id="leito" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-user-clock"></i></span>
+                            <span class="form-section-title">Responsável e volumes</span>
+                        </div>
+                        <div class="form-section-grid">
+                            <div class="form-group span-2">
+                                <label for="nome-visitante">Nome do Visitante</label>
+                                <input type="text" id="nome-visitante" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="whatsapp-contato">WhatsApp</label>
+                                <input type="tel" id="whatsapp-contato" class="form-control" placeholder="(00) 00000-0000">
+                            </div>
+                            <div class="form-group">
+                                <label for="volumes">Quantidade de Volumes</label>
+                                <input type="number" id="volumes" class="form-control" min="1" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-clock"></i></span>
+                            <span class="form-section-title">Permanência</span>
+                        </div>
+                        <div class="form-section-grid">
+                            <div class="form-group" id="hora-prevista-group">
+                                <label for="hora-prevista">Hora prevista de saída</label>
+                                <input type="time" id="hora-prevista" class="form-control" required>
+                                <div class="field-hint">Sugerimos 1 hora após o cadastro. Ajuste manualmente se necessário.</div>
+                            </div>
+                            <div class="form-group" id="visita-estendida-group">
+                                <div class="visita-estendida-control">
+                                    <input type="checkbox" id="visita-estendida">
+                                    <div class="visita-estendida-text">
+                                        <label for="visita-estendida">Visita estendida</label>
+                                        <div class="field-hint">Mantém o armário em uso até a liberação manual.</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="search-feedback" id="prontuario-busca-feedback" role="status" aria-live="polite"></div>
                     </div>
-                    <div class="form-group">
-                        <label for="nome-paciente">Nome do Paciente</label>
-                        <input type="text" id="nome-paciente" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="nome-visitante">Nome do Visitante</label>
-                        <input type="text" id="nome-visitante" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="prontuario">Prontuário <span class="tag-opcional">Opcional</span></label>
-                        <input type="text" id="prontuario" class="form-control" inputmode="numeric" autocomplete="off" placeholder="Digite o prontuário do paciente">
-                    </div>
-                    <div class="form-group">
-                        <label for="leito">Leito</label>
-                        <input type="text" id="leito" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="whatsapp-contato">WhatsApp</label>
-                        <input type="tel" id="whatsapp-contato" class="form-control" placeholder="(00) 00000-0000">
-                    </div>
-                    <div class="form-group">
-                        <label for="volumes">Quantidade de Volumes</label>
-                        <input type="number" id="volumes" class="form-control" min="1" required>
-                    </div>
-                    <div class="form-group" id="hora-prevista-group">
-                        <label for="hora-prevista">Hora prevista de saída</label>
-                        <input type="time" id="hora-prevista" class="form-control" required>
-                        <div class="field-hint">Sugerimos 1 hora após o cadastro. Ajuste manualmente se necessário.</div>
-                    </div>
-                    <div class="form-group" id="visita-estendida-group">
-                        <div class="visita-estendida-control">
-                            <input type="checkbox" id="visita-estendida">
-                            <div class="visita-estendida-text">
-                                <label for="visita-estendida">Visita estendida</label>
-                                <div class="field-hint">Mantém o armário em uso até a liberação manual.</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-actions">
+                    <div class="form-actions form-actions--split">
                         <button type="button" class="btn btn-secondary" id="btn-cancelar">Cancelar</button>
                         <button type="submit" class="btn btn-primary" id="btn-salvar">Salvar</button>
                     </div>
@@ -886,54 +926,74 @@
     <div class="modal" id="usuario-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title" id="usuario-modal-title">Cadastrar Usuário</div>
+                <span class="modal-header-icon" aria-hidden="true"><i class="fas fa-user-gear"></i></span>
+                <div class="modal-header-text">
+                    <div class="modal-title" id="usuario-modal-title">Cadastrar Usuário</div>
+                    <div class="modal-subtitle">Identificação, credenciais e permissões</div>
+                </div>
                 <button class="modal-close" id="usuario-modal-close">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="usuario-form">
-                    <div class="form-group">
-                        <label for="usuario-nome">Nome Completo</label>
-                        <input type="text" id="usuario-nome" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="usuario-email">Matrícula</label>
-                        <input type="text" id="usuario-email" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="usuario-senha">Senha</label>
-                        <input type="password" id="usuario-senha" class="form-control" autocomplete="new-password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="usuario-perfil">Perfil</label>
-                        <select id="usuario-perfil" class="form-control" required>
-                            <option value="usuario">Usuário</option>
-                            <option value="admin">Administrador</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="usuario-status">Status</label>
-                        <select id="usuario-status" class="form-control" required>
-                            <option value="ativo">Ativo</option>
-                            <option value="inativo">Inativo</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="acessos-group">
-                        <label>Acessos</label>
-                        <div>
-                            <input type="checkbox" id="acesso-visitantes" checked>
-                            <label for="acesso-visitantes">Visitantes</label>
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-id-card"></i></span>
+                            <span class="form-section-title">Identificação</span>
                         </div>
-                        <div>
-                            <input type="checkbox" id="acesso-acompanhantes" checked>
-                            <label for="acesso-acompanhantes">Acompanhantes</label>
+                        <div class="form-section-grid">
+                            <div class="form-group span-2">
+                                <label for="usuario-nome">Nome Completo</label>
+                                <input type="text" id="usuario-nome" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="usuario-email">Matrícula</label>
+                                <input type="text" id="usuario-email" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="usuario-senha">Senha</label>
+                                <input type="password" id="usuario-senha" class="form-control" autocomplete="new-password" required>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Unidades com acesso</label>
-                        <div id="usuario-unidades" class="checkbox-grid"></div>
-                        <div class="field-hint">Selecione as unidades que o usuário pode visualizar.</div>
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-shield-halved"></i></span>
+                            <span class="form-section-title">Acesso e permissões</span>
+                        </div>
+                        <div class="form-section-grid">
+                            <div class="form-group">
+                                <label for="usuario-perfil">Perfil</label>
+                                <select id="usuario-perfil" class="form-control" required>
+                                    <option value="usuario">Usuário</option>
+                                    <option value="admin">Administrador</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="usuario-status">Status</label>
+                                <select id="usuario-status" class="form-control" required>
+                                    <option value="ativo">Ativo</option>
+                                    <option value="inativo">Inativo</option>
+                                </select>
+                            </div>
+                            <div class="form-group span-2" id="acessos-group">
+                                <label>Acessos</label>
+                                <div>
+                                    <input type="checkbox" id="acesso-visitantes" checked>
+                                    <label for="acesso-visitantes">Visitantes</label>
+                                </div>
+                                <div>
+                                    <input type="checkbox" id="acesso-acompanhantes" checked>
+                                    <label for="acesso-acompanhantes">Acompanhantes</label>
+                                </div>
+                            </div>
+                            <div class="form-group span-2">
+                                <label>Unidades com acesso</label>
+                                <div id="usuario-unidades" class="checkbox-grid"></div>
+                                <div class="field-hint">Selecione as unidades que o usuário pode visualizar.</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-actions">
+                    <div class="form-actions form-actions--split">
                         <button type="button" class="btn btn-secondary" id="usuario-btn-cancelar">Cancelar</button>
                         <button type="submit" class="btn btn-primary" id="usuario-btn-salvar">Salvar</button>
                     </div>
@@ -945,43 +1005,61 @@
     <div class="modal" id="achado-modal">
         <div class="modal-content modal-glass">
             <div class="modal-header">
-                <div class="modal-title" id="achado-modal-title">Registrar pertence</div>
+                <span class="modal-header-icon" aria-hidden="true"><i class="fas fa-magnifying-glass-location"></i></span>
+                <div class="modal-header-text">
+                    <div class="modal-title" id="achado-modal-title">Registrar pertence</div>
+                    <div class="modal-subtitle">Guarda de itens achados e perdidos</div>
+                </div>
                 <button class="modal-close" id="achado-modal-close" type="button">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="achado-form" autocomplete="off">
                     <input type="hidden" id="achado-id">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="achado-dono" class="wizard-required">Dono do pertence</label>
-                            <input type="text" id="achado-dono" class="form-control" required placeholder="Nome completo">
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-box-open"></i></span>
+                            <span class="form-section-title">Pertence</span>
                         </div>
-                        <div class="form-group">
-                            <label for="achado-data">Data da guarda</label>
-                            <input type="date" id="achado-data" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="achado-telefone">Telefone para contato</label>
-                            <input type="tel" id="achado-telefone" class="form-control" placeholder="(85) 00000-0000">
-                        </div>
-                        <div class="form-group">
-                            <label for="achado-status">Foi encontrado?</label>
-                            <select id="achado-status" class="form-control">
-                                <option value="nao">Não</option>
-                                <option value="sim">Sim</option>
-                            </select>
-                        </div>
-                        <div class="form-group form-group-full">
-                            <label for="achado-descricao" class="wizard-required">Descrição</label>
-                            <textarea id="achado-descricao" class="form-control" rows="3" required placeholder="Ex.: mochila preta com carteira e documentos"></textarea>
-                        </div>
-                        <div class="form-group form-group-full">
-                            <label for="achado-historico">Histórico de contato</label>
-                            <textarea id="achado-historico" class="form-control" rows="2" placeholder="Anotações rápidas e confirmações de ligação"></textarea>
-                            <div class="field-hint">Use para registrar ligações ou recados deixados.</div>
+                        <div class="form-section-grid">
+                            <div class="form-group">
+                                <label for="achado-dono" class="wizard-required">Dono do pertence</label>
+                                <input type="text" id="achado-dono" class="form-control" required placeholder="Nome completo">
+                            </div>
+                            <div class="form-group">
+                                <label for="achado-data">Data da guarda</label>
+                                <input type="date" id="achado-data" class="form-control">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="achado-descricao" class="wizard-required">Descrição</label>
+                                <textarea id="achado-descricao" class="form-control" rows="3" required placeholder="Ex.: mochila preta com carteira e documentos"></textarea>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-actions">
+                    <div class="form-section">
+                        <div class="form-section-header">
+                            <span class="form-section-icon" aria-hidden="true"><i class="fas fa-phone"></i></span>
+                            <span class="form-section-title">Contato e devolução</span>
+                        </div>
+                        <div class="form-section-grid">
+                            <div class="form-group">
+                                <label for="achado-telefone">Telefone para contato</label>
+                                <input type="tel" id="achado-telefone" class="form-control" placeholder="(85) 00000-0000">
+                            </div>
+                            <div class="form-group">
+                                <label for="achado-status">Foi encontrado?</label>
+                                <select id="achado-status" class="form-control">
+                                    <option value="nao">Não</option>
+                                    <option value="sim">Sim</option>
+                                </select>
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="achado-historico">Histórico de contato</label>
+                                <textarea id="achado-historico" class="form-control" rows="2" placeholder="Anotações rápidas e confirmações de ligação"></textarea>
+                                <div class="field-hint">Use para registrar ligações ou recados deixados.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions form-actions--split">
                         <button type="button" class="btn btn-secondary" id="achado-btn-cancelar">Cancelar</button>
                         <button type="submit" class="btn btn-primary" id="achado-btn-salvar">Salvar</button>
                     </div>
@@ -998,9 +1076,16 @@
                         <div class="wizard-title">Termo de responsabilidade do armário <span id="termo-armario"></span></div>
                         <div class="wizard-subtitle">Preencha os dados do acompanhante e do paciente antes de aplicar o termo.</div>
                     </div>
-                    <div class="wizard-progress">
-                        <div class="wizard-progress-bar"><span id="termo-progress"></span></div>
-                        <div class="wizard-progress-label" id="termo-progress-label">Passo 1 de 3</div>
+                    <div class="wizard-progress wizard-stepper" data-progress-label="termo-progress-label">
+                        <div class="wizard-stepper-track">
+                            <div class="wizard-progress-bar"><span id="termo-progress"></span></div>
+                        </div>
+                        <ol class="wizard-stepper-steps">
+                            <li class="wizard-stepper-step is-active" data-index="1"><span class="wizard-stepper-dot">1</span><span class="wizard-stepper-name">Paciente</span></li>
+                            <li class="wizard-stepper-step" data-index="2"><span class="wizard-stepper-dot">2</span><span class="wizard-stepper-name">Responsável</span></li>
+                            <li class="wizard-stepper-step" data-index="3"><span class="wizard-stepper-dot">3</span><span class="wizard-stepper-name">Ciência e assinatura</span></li>
+                        </ol>
+                        <div class="wizard-progress-label sr-only" id="termo-progress-label">Passo 1 de 3</div>
                             </div>
                             <button class="modal-close" id="termo-modal-close" type="button">&times;</button>
                         </div>
@@ -1209,9 +1294,17 @@
             <div class="modal-header">
                 <div class="mov-wizard-head">
                     <div class="modal-title" id="movimentacao-modal-title">Movimentações</div>
-                    <div class="wizard-progress mov-wizard-progress">
-                        <div class="wizard-progress-bar"><span id="mov-progress"></span></div>
-                        <div class="wizard-progress-label" id="mov-progress-label">Passo 1 de 4</div>
+                    <div class="wizard-progress mov-wizard-progress wizard-stepper" data-progress-label="mov-progress-label">
+                        <div class="wizard-stepper-track">
+                            <div class="wizard-progress-bar"><span id="mov-progress"></span></div>
+                        </div>
+                        <ol class="wizard-stepper-steps">
+                            <li class="wizard-stepper-step is-active" data-index="1"><span class="wizard-stepper-dot">1</span><span class="wizard-stepper-name">Tipo</span></li>
+                            <li class="wizard-stepper-step" data-index="2"><span class="wizard-stepper-dot">2</span><span class="wizard-stepper-name">Itens</span></li>
+                            <li class="wizard-stepper-step" data-index="3"><span class="wizard-stepper-dot">3</span><span class="wizard-stepper-name">Revisão</span></li>
+                            <li class="wizard-stepper-step" data-index="4"><span class="wizard-stepper-dot">4</span><span class="wizard-stepper-name">Assinatura</span></li>
+                        </ol>
+                        <div class="wizard-progress-label sr-only" id="mov-progress-label">Passo 1 de 4</div>
                     </div>
                 </div>
                 <button class="modal-close" id="movimentacao-modal-close" type="button">&times;</button>
