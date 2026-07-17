@@ -7024,7 +7024,7 @@ function salvarMovimentacao(dados) {
     var tipoNormalizado = normalizarTextoBasico(dados.tipo);
     var numeroArmario = normalizarNumeroArmario(dados.numeroArmario);
     if (!numeroArmario) {
-      var nomeSheetArmario = tipoNormalizado === 'visitante' ? 'Visitantes' : 'Acompanhantes';
+      var nomeSheetArmario = tipoArmarioNormalizado === 'visitante' ? 'Visitantes' : 'Acompanhantes';
       var armarioSheet = ss.getSheetByName(nomeSheetArmario);
       if (armarioSheet) {
         var estruturaArmario = obterEstruturaPlanilha(armarioSheet);
