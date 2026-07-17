@@ -9993,8 +9993,7 @@
                         };
                     })
                     .filter(item => item.quantidade > 0 && item.descricao)
-                    .map(item => ({ quantidade: item.quantidade, descricao: item.descricao, fotoBase64: item.fotoBase64, fotoMime: item.fotoMime }))
-                    .filter(item => item.quantidade > 0 && item.descricao && item.fotoBase64);
+                    .map(item => ({ quantidade: item.quantidade, descricao: item.descricao, fotoBase64: item.fotoBase64, fotoMime: item.fotoMime }));
             }
 
             return linhas.map(linha => {
