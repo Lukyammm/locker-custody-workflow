@@ -4812,15 +4812,7 @@
                 .filter(a => armarioPassaNosFiltrosSelecionados(a, filtrosAtivos))
                 .filter(armario => !termoBusca || armarioCorrespondeBusca(armario, termoBusca));
 
-            const prioridadeStatusDashboard = { livre: 0, vencido: 1, proximo: 2, contingencia: 3, 'em-uso': 4 };
-            armariosParaExibir.sort((a, b) => {
-                const statusA = armarioEhContingencia(a) ? 'contingencia' : a.status;
-                const statusB = armarioEhContingencia(b) ? 'contingencia' : b.status;
-                const prioridadeA = prioridadeStatusDashboard[statusA] ?? 5;
-                const prioridadeB = prioridadeStatusDashboard[statusB] ?? 5;
-                if (prioridadeA !== prioridadeB) return prioridadeA - prioridadeB;
-                return (a.numero || '').localeCompare(b.numero || '', 'pt-BR', { numeric: true });
-            });
+            armariosParaExibir.sort((a, b) => (a.numero || '').localeCompare(b.numero || '', 'pt-BR', { numeric: true }));
 
             const criarCardArmario = (armario) => {
                 const card = document.createElement('div');
