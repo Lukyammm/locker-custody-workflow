@@ -9039,6 +9039,7 @@
             if (!elementos.termoAssinaturaCanvas) return;
             evento.preventDefault();
             termoDesenhandoAssinatura = true;
+            elementos.termoAssinaturaCanvas.setPointerCapture?.(evento.pointerId);
             const ctx = elementos.termoAssinaturaCanvas.getContext('2d');
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
@@ -9063,6 +9064,7 @@
             evento.preventDefault();
             termoDesenhandoAssinatura = false;
             termoAssinaturaDesenhada = true;
+            elementos.termoAssinaturaCanvas?.releasePointerCapture?.(evento.pointerId);
             elementos.termoAssinaturaCanvas?.closest('.wizard-field')?.classList.remove('invalid');
             salvarRascunhoTermo();
         }
@@ -9097,6 +9099,7 @@
             if (!elementos.movSignatureCanvas) return;
             evento.preventDefault();
             movDesenhandoAssinatura = true;
+            elementos.movSignatureCanvas.setPointerCapture?.(evento.pointerId);
             const ctx = elementos.movSignatureCanvas.getContext('2d');
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
@@ -9121,6 +9124,7 @@
             evento.preventDefault();
             movDesenhandoAssinatura = false;
             movAssinaturaDesenhada = true;
+            elementos.movSignatureCanvas?.releasePointerCapture?.(evento.pointerId);
             movAssinaturaImagemAtual = elementos.movSignatureCanvas?.toDataURL('image/png') || movAssinaturaImagemAtual;
             elementos.movSignatureField?.classList.remove('invalid');
         }
