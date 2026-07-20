@@ -3376,7 +3376,6 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
 
     registrarLog('LIBERAÇÃO', `Armário ${numeroArmario} liberado`);
 
-    SpreadsheetApp.flush();
     invalidarCachesArmariosRelacionados(sheetName);
 
     return { success: true, message: 'Armário liberado com sucesso' };
@@ -5007,15 +5006,6 @@ function salvarTermoCompleto(dadosTermo) {
     ];
 
     sheet.getRange(linhaExistente, 1, 1, linhaDados.length).setValues([linhaDados]);
-    SpreadsheetApp.flush();
-
-    // Confirmação rápida de persistência para evitar falsos positivos no front-end
-    var linhaGravada = sheet.getRange(linhaExistente, 1, 1, 3).getValues();
-    var idGravado = linhaGravada && linhaGravada[0] ? linhaGravada[0][0] : '';
-    var armarioGravado = linhaGravada && linhaGravada[0] ? linhaGravada[0][1] : '';
-    if (String(idGravado) !== String(termoId) || String(armarioGravado) !== String(dadosTermo.armarioId || '')) {
-      throw new Error('Falha ao confirmar o salvamento do termo. Tente novamente.');
-    }
 
     // 2. Atualizar status do armário na aba "Acompanhantes"
     var cadastroArmario = dadosTermo.cadastroArmario;
@@ -5321,14 +5311,13 @@ function obterTermosRegistrados() {
 
 function getTermo(dados) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('Termos de Responsabilidade');
+    var registrados = obterTermosRegistrados();
+    var termosCarregados = registrados.termos;
 
-    if (!sheet || sheet.getLastRow() < 2) {
+    if (!termosCarregados || !termosCarregados.length) {
       return { success: false, error: 'Termo não encontrado' };
     }
-    
-    var data = sheet.getDataRange().getValues();
+
     var termo = null;
     var termoFinalizadoMaisRecente = null;
     var armarioIdInformado = dados.armarioId !== null && dados.armarioId !== undefined
@@ -5337,54 +5326,43 @@ function getTermo(dados) {
     var numeroInformado = normalizarNumeroArmario(dados.numeroArmario);
     var incluirFinalizados = converterParaBoolean(dados.incluirFinalizados);
 
-    for (var i = data.length - 1; i >= 1; i--) {
-      var idLinha = data[i][1];
-      var idLinhaTexto = idLinha !== null && idLinha !== undefined ? idLinha.toString().trim() : '';
+    for (var i = termosCarregados.length - 1; i >= 0; i--) {
+      var termoLinha = termosCarregados[i];
+      var idLinhaTexto = termoLinha.armarioId !== null && termoLinha.armarioId !== undefined
+        ? termoLinha.armarioId.toString().trim()
+        : '';
       if (armarioIdInformado && idLinhaTexto !== armarioIdInformado) {
         continue;
       }
 
-      var numeroLinha = data[i][2] ? data[i][2].toString().trim() : '';
+      var numeroLinha = termoLinha.numeroArmario || '';
       var numeroLinhaNormalizado = normalizarNumeroArmario(numeroLinha);
       if (numeroInformado && numeroLinhaNormalizado !== numeroInformado) {
         continue;
       }
 
-      var assinaturas = normalizarAssinaturas(data[i][18]);
-      var orientacoesSalvas = data[i][13] ? data[i][13].split(',').filter(String) : [];
-      var volumesSalvos = [];
-      if (data[i][14]) {
-        try {
-          volumesSalvos = JSON.parse(data[i][14]);
-        } catch (erroVolumes) {
-          volumesSalvos = [];
-        }
-      }
-
-      var statusBruto = data[i][19] || '';
-      var statusNormalizado = normalizarTextoBasico(statusBruto);
-      var possuiPdf = Boolean(data[i][17]);
-      var termoFinalizado = Boolean(possuiPdf || statusNormalizado === 'finalizado' || (assinaturas && assinaturas.finalizadoEm));
+      var assinaturas = termoLinha.assinaturas || normalizarAssinaturas('');
+      var termoFinalizado = Boolean(termoLinha.finalizado);
 
       var termoAtual = {
-        id: data[i][0],
-        armarioId: data[i][1],
+        id: termoLinha.id,
+        armarioId: termoLinha.armarioId,
         numeroArmario: numeroLinha,
-        paciente: data[i][3],
-        prontuario: data[i][4],
-        nascimento: data[i][5],
-        setor: data[i][6],
-        leito: data[i][7],
-        consciente: data[i][8],
-        acompanhante: data[i][9],
-        telefone: data[i][10],
-        documento: data[i][11],
-        parentesco: data[i][12],
-        orientacoes: orientacoesSalvas,
-        volumes: Array.isArray(volumesSalvos) ? volumesSalvos : [],
-        descricaoVolumes: data[i][15],
-        aplicadoEm: data[i][16],
-        pdfUrl: data[i][17],
+        paciente: termoLinha.paciente,
+        prontuario: termoLinha.prontuario,
+        nascimento: termoLinha.nascimento,
+        setor: termoLinha.setor,
+        leito: termoLinha.leito,
+        consciente: termoLinha.consciente,
+        acompanhante: termoLinha.acompanhante,
+        telefone: termoLinha.telefone,
+        documento: termoLinha.documento,
+        parentesco: termoLinha.parentesco,
+        orientacoes: termoLinha.orientacoes,
+        volumes: Array.isArray(termoLinha.volumes) ? termoLinha.volumes : [],
+        descricaoVolumes: termoLinha.descricaoVolumes,
+        aplicadoEm: termoLinha.aplicadoEm,
+        pdfUrl: termoLinha.pdfUrl,
         assinaturaBase64: assinaturas.inicial,
         assinaturaMimeInicial: assinaturas.mimeInicial || 'image/png',
         assinaturaMimeFinal: assinaturas.mimeFinal || 'image/png',
@@ -5392,8 +5370,8 @@ function getTermo(dados) {
         finalizadoEm: assinaturas.finalizadoEm,
         metodoFinal: assinaturas.metodoFinal,
         cpfConfirmacao: assinaturas.cpfFinal,
-        status: statusBruto,
-        statusNormalizado: statusNormalizado,
+        status: termoLinha.status,
+        statusNormalizado: termoLinha.statusNormalizado,
         finalizado: termoFinalizado
       };
 

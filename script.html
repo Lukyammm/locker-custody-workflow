@@ -3616,11 +3616,12 @@
                     });
                 });
             }
+            const renderizarArmariosBuscaDebounced = debounce(renderizarArmarios, 150);
             if (elementos.dashboardSearch) {
                 elementos.dashboardSearch.addEventListener('input', () => {
                     estado.buscaDashboard = elementos.dashboardSearch.value || '';
                     atualizarVisibilidadeBotaoLimparBusca();
-                    renderizarArmarios();
+                    renderizarArmariosBuscaDebounced();
                 });
             }
             if (elementos.filterSearchWrapper && elementos.dashboardSearch) {
