@@ -1821,6 +1821,14 @@ function handlePost(e) {
         return ContentService.createTextOutput(JSON.stringify(executarBackupSistema(e.parameter)))
           .setMimeType(ContentService.MimeType.JSON);
 
+      case 'listarBackupsSistema':
+        return ContentService.createTextOutput(JSON.stringify(listarBackupsSistema()))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'detalharBackup':
+        return ContentService.createTextOutput(JSON.stringify(detalharBackup(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
       default:
         return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Ação não reconhecida: ' + action }))
           .setMimeType(ContentService.MimeType.JSON);
@@ -7742,6 +7750,131 @@ function executarBackupSistema() {
     registrarLog('BACKUP_ERRO', error.toString());
     return { success: false, error: error.toString() };
   }
+}
+
+// Lista todos os arquivos de backup existentes no Drive (metadados apenas, leve).
+// Não abre as planilhas — retorna nome, tipo, mês/ano, tamanho, data e link.
+function listarBackupsSistema() {
+  try {
+    var permissao = validarPermissaoAdmin({ usuarioId: usuarioContextoRequisicaoId });
+    if (!permissao.ok) {
+      return { success: false, error: permissao.error };
+    }
+
+    try {
+      DriveApp.getFolderById(PASTA_BACKUP_RAIZ_ID);
+    } catch (erroPasta) {
+      return { success: false, error: 'Pasta de backup não acessível no Drive.' };
+    }
+
+    var timezone = Session.getScriptTimeZone() || 'America/Fortaleza';
+    var tipos = [
+      { tipo: 'geral', prefixo: 'BACKUP-GERAL-', rotulo: 'Geral' },
+      { tipo: 'logs', prefixo: 'BACKUP-LOGS-', rotulo: 'Logs' },
+      { tipo: 'termos', prefixo: 'BACKUP-TERMOS-', rotulo: 'Termos' }
+    ];
+
+    var backups = [];
+    tipos.forEach(function(t) {
+      var arquivos = listarArquivosBackup(t.tipo);
+      arquivos.forEach(function(arquivo) {
+        try {
+          var nome = arquivo.getName();
+          var atualizado = arquivo.getLastUpdated();
+          var tamanho = 0;
+          try { tamanho = arquivo.getSize(); } catch (erroTamanho) { tamanho = 0; }
+          backups.push({
+            id: arquivo.getId(),
+            nome: nome,
+            tipo: t.tipo,
+            tipoRotulo: t.rotulo,
+            mesAno: extrairMesAnoDoNomeBackup(nome, t.prefixo),
+            url: arquivo.getUrl(),
+            atualizadoEm: atualizado ? Utilities.formatDate(atualizado, timezone, "yyyy-MM-dd'T'HH:mm:ss") : '',
+            atualizadoTimestamp: atualizado ? atualizado.getTime() : 0,
+            tamanhoBytes: tamanho
+          });
+        } catch (erroArquivo) {
+          registrarLog('AVISO_BACKUP', 'Falha ao ler metadados de backup: ' + erroArquivo.toString());
+        }
+      });
+    });
+
+    backups.sort(function(a, b) {
+      if (b.atualizadoTimestamp !== a.atualizadoTimestamp) {
+        return b.atualizadoTimestamp - a.atualizadoTimestamp;
+      }
+      return (b.nome || '').localeCompare(a.nome || '');
+    });
+
+    return {
+      success: true,
+      backups: backups,
+      total: backups.length
+    };
+  } catch (error) {
+    registrarLog('BACKUP_ERRO', 'Falha ao listar backups: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+// Abre um único arquivo de backup e retorna as abas (planilhas) que ele contém
+// com a quantidade de registros de cada uma. Chamado sob demanda ao expandir.
+function detalharBackup(dados) {
+  try {
+    var permissao = validarPermissaoAdmin({ usuarioId: usuarioContextoRequisicaoId });
+    if (!permissao.ok) {
+      return { success: false, error: permissao.error };
+    }
+
+    var fileId = dados && dados.id ? dados.id.toString().trim() : '';
+    if (!fileId) {
+      return { success: false, error: 'Identificador do backup não informado.' };
+    }
+
+    var planilha;
+    try {
+      planilha = SpreadsheetApp.openById(fileId);
+    } catch (erroAbrir) {
+      return { success: false, error: 'Não foi possível abrir o arquivo de backup.' };
+    }
+
+    var abas = planilha.getSheets().map(function(aba) {
+      var ultimaLinha = aba.getLastRow();
+      return {
+        nome: aba.getName(),
+        registros: ultimaLinha > 1 ? ultimaLinha - 1 : 0
+      };
+    });
+
+    abas.sort(function(a, b) {
+      if (b.registros !== a.registros) {
+        return b.registros - a.registros;
+      }
+      return (a.nome || '').localeCompare(b.nome || '');
+    });
+
+    var totalRegistros = abas.reduce(function(soma, item) {
+      return soma + (item.registros || 0);
+    }, 0);
+
+    return {
+      success: true,
+      abas: abas,
+      totalAbas: abas.length,
+      totalRegistros: totalRegistros
+    };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+// Extrai o trecho "yyyy-MM" do nome de um arquivo de backup.
+function extrairMesAnoDoNomeBackup(nome, prefixo) {
+  var texto = (nome || '').toString();
+  var resto = prefixo ? texto.replace(prefixo, '') : texto;
+  var match = resto.match(/(\d{4})-(\d{2})/);
+  return match ? match[0] : resto.trim();
 }
 
 // Funções para notificações

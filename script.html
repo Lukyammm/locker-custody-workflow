@@ -65,6 +65,14 @@
                     carregado: false,
                     ultimaAtualizacao: null
                 },
+                backups: {
+                    itens: [],
+                    carregando: false,
+                    carregado: false,
+                    detalhes: {},
+                    expandidos: {},
+                    ultimaAtualizacao: null
+                },
                 carregamentoTermosId: 0,
                 filtrosTermos: {
                     status: 'todos',
@@ -787,6 +795,9 @@
             logsBtnLimpar: document.getElementById('logs-btn-limpar'),
             backupExecutarBtn: document.getElementById('backup-executar'),
             backupResultado: document.getElementById('backup-resultado'),
+            backupListaRefreshBtn: document.getElementById('backup-lista-refresh'),
+            backupListaResumo: document.getElementById('backup-lista-resumo'),
+            backupLista: document.getElementById('backup-lista'),
             tabelaHistoricoVisitantesBody: document.querySelector('#tabela-historico-visitantes tbody'),
             historicoVisitantesDataInicio: document.getElementById('historico-visitantes-data-inicio'),
             historicoVisitantesDataFim: document.getElementById('historico-visitantes-data-fim'),
@@ -4007,6 +4018,19 @@
             if (elementos.backupExecutarBtn) {
                 elementos.backupExecutarBtn.addEventListener('click', executarBackupSistemaFrontend);
             }
+            if (elementos.backupListaRefreshBtn) {
+                elementos.backupListaRefreshBtn.addEventListener('click', () => carregarListaBackups({ forcar: true }));
+            }
+            if (elementos.backupLista) {
+                elementos.backupLista.addEventListener('click', (evento) => {
+                    const botao = evento.target.closest('.backup-card-detalhes-btn');
+                    if (!botao || !elementos.backupLista.contains(botao)) return;
+                    const id = botao.dataset.backupId;
+                    if (id) {
+                        alternarDetalhesBackup(id);
+                    }
+                });
+            }
             const aplicarFiltrosHistoricoVisitantesDebounced = debounce(aplicarFiltrosHistoricoVisitantes, 150);
             if (elementos.historicoVisitantesDataInicio) {
                 elementos.historicoVisitantesDataInicio.addEventListener('change', aplicarFiltrosHistoricoVisitantesDebounced);
@@ -5246,6 +5270,9 @@
                     case 'registros-imagens':
                         await carregarTabelaRegistrosImagens();
                         break;
+                    case 'backup':
+                        await carregarListaBackups();
+                        break;
                 }
             } catch (error) {
                 console.error('Erro ao carregar dados da tabela:', error);
@@ -6445,6 +6472,7 @@
 
                 Swal.close();
                 mostrarSucesso(`Backup concluído. Registros movidos: ${total}.`);
+                carregarListaBackups({ forcar: true });
             } catch (erro) {
                 console.error('Erro ao executar backup:', erro);
                 if (elementos.backupResultado) {
@@ -6459,6 +6487,317 @@
                     elementos.backupExecutarBtn.innerHTML = textoOriginalBotao;
                 }
             }
+        }
+        function escaparHtml(texto) {
+            return String(texto ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        function obterEstadoBackups() {
+            if (!estado.backups) {
+                estado.backups = {
+                    itens: [],
+                    carregando: false,
+                    carregado: false,
+                    detalhes: {},
+                    expandidos: {},
+                    ultimaAtualizacao: null
+                };
+            }
+            return estado.backups;
+        }
+        function formatarTamanhoArquivo(bytes) {
+            const numero = Number(bytes) || 0;
+            if (numero <= 0) return '—';
+            const unidades = ['B', 'KB', 'MB', 'GB'];
+            let valor = numero;
+            let indice = 0;
+            while (valor >= 1024 && indice < unidades.length - 1) {
+                valor /= 1024;
+                indice++;
+            }
+            const casas = valor < 10 && indice > 0 ? 1 : 0;
+            return `${valor.toFixed(casas)} ${unidades[indice]}`;
+        }
+        function formatarMesAnoBackup(mesAno) {
+            const texto = (mesAno || '').toString();
+            const match = texto.match(/^(\d{4})-(\d{2})$/);
+            if (!match) return texto || 'Sem data';
+            const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+                'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+            const indiceMes = Number(match[2]) - 1;
+            const nomeMes = meses[indiceMes] || match[2];
+            const titulo = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+            return `${titulo} de ${match[1]}`;
+        }
+        function formatarDataHoraBackup(iso) {
+            if (!iso) return 'Data desconhecida';
+            const data = new Date(iso);
+            if (Number.isNaN(data.getTime())) return 'Data desconhecida';
+            return data.toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+        function classeBadgeTipoBackup(tipo) {
+            const normal = normalizarTexto(tipo);
+            if (normal === 'logs') return 'badge--warning';
+            if (normal === 'termos') return 'badge--info';
+            return 'badge--success';
+        }
+        async function carregarListaBackups(opcoes = {}) {
+            const { forcar = false } = opcoes;
+            const estadoBackups = obterEstadoBackups();
+            if (!perfilAtualEhAdmin()) {
+                renderizarEstadoListaBackups('Disponível apenas para administradores.', 'empty');
+                if (elementos.backupListaResumo) {
+                    elementos.backupListaResumo.textContent = 'Acesso restrito a administradores.';
+                }
+                return;
+            }
+            if (estadoBackups.carregando) return;
+            if (estadoBackups.carregado && !forcar) {
+                renderizarListaBackups();
+                return;
+            }
+
+            estadoBackups.carregando = true;
+            renderizarEstadoListaBackups('Carregando backups...', 'loading');
+            if (elementos.backupListaResumo) {
+                elementos.backupListaResumo.textContent = 'Carregando backups...';
+            }
+            if (elementos.backupListaRefreshBtn) {
+                elementos.backupListaRefreshBtn.disabled = true;
+            }
+
+            try {
+                const resposta = await callGoogleScript('listarBackupsSistema', {}, { cache: false });
+                if (!resposta || !resposta.success) {
+                    throw new Error(resposta && resposta.error ? resposta.error : 'Não foi possível carregar os backups.');
+                }
+                estadoBackups.itens = Array.isArray(resposta.backups) ? resposta.backups : [];
+                estadoBackups.carregado = true;
+                estadoBackups.ultimaAtualizacao = new Date();
+                estadoBackups.expandidos = {};
+                renderizarListaBackups();
+            } catch (erro) {
+                console.error('Erro ao listar backups:', erro);
+                renderizarEstadoListaBackups('Não foi possível carregar os backups.', 'error');
+                if (elementos.backupListaResumo) {
+                    elementos.backupListaResumo.textContent = 'Falha ao carregar a lista de backups.';
+                }
+            } finally {
+                estadoBackups.carregando = false;
+                if (elementos.backupListaRefreshBtn) {
+                    elementos.backupListaRefreshBtn.disabled = false;
+                }
+            }
+        }
+        function renderizarEstadoListaBackups(mensagem, tipo = 'empty') {
+            const container = elementos.backupLista;
+            if (!container) return;
+            const classe = tipo === 'loading' ? 'table-loading'
+                : tipo === 'error' ? 'table-error' : 'table-empty';
+            container.innerHTML = `<p class="backup-lista-estado ${classe}">${escaparHtml(mensagem)}</p>`;
+        }
+        function renderizarListaBackups() {
+            const container = elementos.backupLista;
+            if (!container) return;
+            const estadoBackups = obterEstadoBackups();
+            const itens = Array.isArray(estadoBackups.itens) ? estadoBackups.itens : [];
+
+            if (!itens.length) {
+                renderizarEstadoListaBackups('Nenhum backup encontrado no Drive ainda.', 'empty');
+                if (elementos.backupListaResumo) {
+                    elementos.backupListaResumo.textContent = 'Nenhum backup guardado.';
+                }
+                return;
+            }
+
+            // Agrupar por mês/ano preservando a ordem (já vem do mais recente para o mais antigo)
+            const grupos = [];
+            const indicePorMes = {};
+            itens.forEach(backup => {
+                const chave = backup.mesAno || 'sem-data';
+                if (indicePorMes[chave] === undefined) {
+                    indicePorMes[chave] = grupos.length;
+                    grupos.push({ chave, mesAno: backup.mesAno, itens: [] });
+                }
+                grupos[indicePorMes[chave]].itens.push(backup);
+            });
+
+            const html = grupos.map(grupo => {
+                const cards = grupo.itens.map(backup => criarCardBackupHtml(backup)).join('');
+                return `
+                    <div class="backup-grupo">
+                        <div class="backup-grupo-titulo">
+                            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                            <span>${escaparHtml(formatarMesAnoBackup(grupo.mesAno))}</span>
+                            <span class="backup-grupo-contagem">${grupo.itens.length} ${grupo.itens.length === 1 ? 'arquivo' : 'arquivos'}</span>
+                        </div>
+                        <div class="backup-grupo-cards">${cards}</div>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = html;
+            reaplicarDetalhesBackupExpandidos();
+
+            if (elementos.backupListaResumo) {
+                const totalMeses = grupos.length;
+                const hora = estadoBackups.ultimaAtualizacao
+                    ? estadoBackups.ultimaAtualizacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : '';
+                const resumoMeses = totalMeses === 1 ? '1 mês' : `${totalMeses} meses`;
+                elementos.backupListaResumo.textContent =
+                    `${itens.length} ${itens.length === 1 ? 'arquivo' : 'arquivos'} • ${resumoMeses}${hora ? ` • atualizado às ${hora}` : ''}`;
+            }
+        }
+        function criarCardBackupHtml(backup) {
+            const id = escaparHtml(backup.id || '');
+            const badgeClasse = classeBadgeTipoBackup(backup.tipo);
+            const tipoRotulo = escaparHtml(backup.tipoRotulo || 'Backup');
+            const nome = escaparHtml(backup.nome || 'Backup');
+            const dataTexto = escaparHtml(formatarDataHoraBackup(backup.atualizadoEm));
+            const tamanhoTexto = escaparHtml(formatarTamanhoArquivo(backup.tamanhoBytes));
+            const urlSegura = typeof backup.url === 'string' && /^https:\/\//i.test(backup.url) ? backup.url : '';
+            const linkDrive = urlSegura
+                ? `<a class="backup-card-link" href="${escaparHtml(urlSegura)}" target="_blank" rel="noopener">
+                        <i class="fas fa-up-right-from-square" aria-hidden="true"></i> Abrir no Drive
+                   </a>`
+                : '';
+            return `
+                <div class="backup-card" data-backup-id="${id}">
+                    <div class="backup-card-main">
+                        <div class="backup-card-info">
+                            <div class="backup-card-topo">
+                                <span class="badge ${badgeClasse}">${tipoRotulo}</span>
+                                <span class="backup-card-nome" title="${nome}">${nome}</span>
+                            </div>
+                            <div class="backup-card-meta">
+                                <span><i class="fas fa-clock" aria-hidden="true"></i> ${dataTexto}</span>
+                                <span><i class="fas fa-database" aria-hidden="true"></i> ${tamanhoTexto}</span>
+                            </div>
+                        </div>
+                        <div class="backup-card-acoes">
+                            ${linkDrive}
+                            <button type="button" class="btn btn-secondary btn-sm backup-card-detalhes-btn" data-backup-id="${id}">
+                                <i class="fas fa-layer-group" aria-hidden="true"></i> Ver planilhas
+                            </button>
+                        </div>
+                    </div>
+                    <div class="backup-card-detalhes" data-detalhe-id="${id}" hidden></div>
+                </div>`;
+        }
+        function reaplicarDetalhesBackupExpandidos() {
+            const estadoBackups = obterEstadoBackups();
+            Object.keys(estadoBackups.expandidos || {}).forEach(id => {
+                if (estadoBackups.expandidos[id]) {
+                    const detalheCache = estadoBackups.detalhes[id];
+                    if (detalheCache) {
+                        aplicarDetalheBackupNaTela(id, detalheCache);
+                        marcarBotaoDetalhesBackup(id, true);
+                    }
+                }
+            });
+        }
+        function obterElementoDetalheBackup(id) {
+            if (!elementos.backupLista) return null;
+            return elementos.backupLista.querySelector(`.backup-card-detalhes[data-detalhe-id="${cssEscape(id)}"]`);
+        }
+        function marcarBotaoDetalhesBackup(id, expandido) {
+            if (!elementos.backupLista) return;
+            const botao = elementos.backupLista.querySelector(`.backup-card-detalhes-btn[data-backup-id="${cssEscape(id)}"]`);
+            if (!botao) return;
+            botao.innerHTML = expandido
+                ? '<i class="fas fa-chevron-up" aria-hidden="true"></i> Ocultar planilhas'
+                : '<i class="fas fa-layer-group" aria-hidden="true"></i> Ver planilhas';
+        }
+        function aplicarDetalheBackupNaTela(id, detalhe) {
+            const alvo = obterElementoDetalheBackup(id);
+            if (!alvo) return;
+            const abas = Array.isArray(detalhe.abas) ? detalhe.abas.filter(a => a.registros > 0) : [];
+            if (!abas.length) {
+                alvo.innerHTML = '<p class="backup-detalhe-vazio">Este backup não possui registros.</p>';
+                alvo.hidden = false;
+                return;
+            }
+            const linhas = abas.map(aba => `
+                <div class="backup-detalhe-linha">
+                    <span class="backup-detalhe-aba"><i class="fas fa-table" aria-hidden="true"></i> ${escaparHtml(aba.nome)}</span>
+                    <span class="backup-detalhe-qtd">${aba.registros.toLocaleString('pt-BR')} ${aba.registros === 1 ? 'registro' : 'registros'}</span>
+                </div>`).join('');
+            const total = Number(detalhe.totalRegistros) || 0;
+            alvo.innerHTML = `
+                <div class="backup-detalhe-cabecalho">
+                    <span>${abas.length} ${abas.length === 1 ? 'planilha' : 'planilhas'}</span>
+                    <span>${total.toLocaleString('pt-BR')} registros no total</span>
+                </div>
+                ${linhas}`;
+            alvo.hidden = false;
+        }
+        async function alternarDetalhesBackup(id) {
+            const estadoBackups = obterEstadoBackups();
+            const alvo = obterElementoDetalheBackup(id);
+            if (!alvo) return;
+
+            const estaExpandido = Boolean(estadoBackups.expandidos[id]);
+            if (estaExpandido) {
+                alvo.hidden = true;
+                estadoBackups.expandidos[id] = false;
+                marcarBotaoDetalhesBackup(id, false);
+                return;
+            }
+
+            // Já temos o detalhe em cache
+            if (estadoBackups.detalhes[id]) {
+                aplicarDetalheBackupNaTela(id, estadoBackups.detalhes[id]);
+                estadoBackups.expandidos[id] = true;
+                marcarBotaoDetalhesBackup(id, true);
+                return;
+            }
+
+            const botao = elementos.backupLista
+                ? elementos.backupLista.querySelector(`.backup-card-detalhes-btn[data-backup-id="${cssEscape(id)}"]`)
+                : null;
+            if (botao) {
+                botao.disabled = true;
+                botao.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Carregando...';
+            }
+            alvo.innerHTML = '<p class="backup-detalhe-carregando">Lendo planilhas do backup...</p>';
+            alvo.hidden = false;
+
+            try {
+                const resposta = await callGoogleScript('detalharBackup', { id }, { cache: false });
+                if (!resposta || !resposta.success) {
+                    throw new Error(resposta && resposta.error ? resposta.error : 'Não foi possível ler o backup.');
+                }
+                estadoBackups.detalhes[id] = {
+                    abas: Array.isArray(resposta.abas) ? resposta.abas : [],
+                    totalRegistros: Number(resposta.totalRegistros) || 0
+                };
+                estadoBackups.expandidos[id] = true;
+                aplicarDetalheBackupNaTela(id, estadoBackups.detalhes[id]);
+                marcarBotaoDetalhesBackup(id, true);
+            } catch (erro) {
+                console.error('Erro ao detalhar backup:', erro);
+                alvo.innerHTML = '<p class="backup-detalhe-erro">Não foi possível ler as planilhas deste backup.</p>';
+                estadoBackups.expandidos[id] = false;
+                marcarBotaoDetalhesBackup(id, false);
+            } finally {
+                if (botao) {
+                    botao.disabled = false;
+                }
+            }
+        }
+        function cssEscape(valor) {
+            const texto = (valor === undefined || valor === null) ? '' : valor.toString();
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+                return window.CSS.escape(texto);
+            }
+            return texto.replace(/["\\\]]/g, '\\$&');
         }
         function aplicarFiltrosHistoricoVisitantes() {
             const tbody = elementos.tabelaHistoricoVisitantesBody;
