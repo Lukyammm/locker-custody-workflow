@@ -4757,6 +4757,14 @@
             const statusNormalizado = normalizarTexto(armario.status);
             return numeroNormalizado.startsWith('contingencia') || statusNormalizado === 'contingencia';
         }
+        function obterRotuloCurtoArmario(armario) {
+            const numero = (armario?.numero || '').toString();
+            if (armarioEhContingencia(armario)) {
+                const match = numero.match(/(\d+)\s*$/);
+                return match ? `C${match[1]}` : 'C';
+            }
+            return numero;
+        }
         let renderizarArmariosVersao = 0;
         let renderizarArmariosAgendamento = null;
         function cancelarRenderizacaoArmarios() {
@@ -4848,10 +4856,11 @@
                         ? 'Pronto para uso'
                         : `${tipoLabel}${armario.horaInicio ? ` • desde ${armario.horaInicio}` : ''}`;
                 const rotuloPrimario = ehLivre ? 'Abrir agora' : 'Liberar';
+                const rotuloCurto = obterRotuloCurtoArmario(armario);
                 card.innerHTML = `
                     <div class="armario-status-bar" aria-hidden="true"></div>
                     <div class="armario-card-top">
-                        <span class="armario-number prominent" title="${armario.numero}">${armario.numero}</span>
+                        <span class="armario-number prominent" title="${armario.numero}">${rotuloCurto}</span>
                         <span class="armario-status-pill">
                             <span class="armario-status-dot" aria-hidden="true"></span>${statusTexto}
                         </span>
