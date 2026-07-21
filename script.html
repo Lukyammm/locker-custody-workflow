@@ -134,7 +134,13 @@
         const SESSAO_TTL_MS = 1000 * 60 * 60 * 8; // 8 horas
         const CACHE_CHAMADAS_LEITURA_MS = 45 * 1000;
         const cacheChamadasLeitura = new Map();
-        const acoesLeituraComCache = new Set(['getArmarios', 'getUnidades', 'getSetores', 'getUsuarios', 'getNotificacoes']);
+        // Leituras idempotentes com cache curto no cliente (45s). Qualquer
+        // ação de escrita bem-sucedida limpa o cache inteiro, então não há
+        // risco de dado obsoleto após salvar/liberar/movimentar.
+        const acoesLeituraComCache = new Set([
+            'getArmarios', 'getUnidades', 'getSetores', 'getUsuarios', 'getNotificacoes',
+            'getTermo', 'getMovimentacoes', 'getMovimentacoesResumo', 'getRegistrosImagens'
+        ]);
 
         const AVATAR_OPTIONS = [
             {
@@ -4878,10 +4884,12 @@
                         : `${tipoLabel}${armario.horaInicio ? ` • desde ${armario.horaInicio}` : ''}`;
                 const rotuloPrimario = ehLivre ? 'Abrir agora' : 'Liberar';
                 const rotuloCurto = obterRotuloCurtoArmario(armario);
+                const numeroSeguro = escaparHtml(armario.numero || '');
+                const nomePacienteSeguro = escaparHtml(nomePaciente);
                 card.innerHTML = `
                     <div class="armario-status-bar" aria-hidden="true"></div>
                     <div class="armario-card-top">
-                        <span class="armario-number prominent" title="${armario.numero}">${rotuloCurto}</span>
+                        <span class="armario-number prominent" title="${numeroSeguro}">${escaparHtml(rotuloCurto)}</span>
                         <span class="armario-status-pill">
                             <span class="armario-status-dot" aria-hidden="true"></span>${statusTexto}
                         </span>
@@ -4891,13 +4899,13 @@
                             <i class="${statusIcone}"></i>
                         </div>
                         <div class="armario-card-textos">
-                            <span class="armario-card-nome" title="${ehLivre ? statusTexto : nomePaciente}">${ehLivre ? 'Disponível' : nomePaciente}</span>
-                            <span class="armario-card-sub">${subLinha}</span>
+                            <span class="armario-card-nome" title="${ehLivre ? statusTexto : nomePacienteSeguro}">${ehLivre ? 'Disponível' : nomePacienteSeguro}</span>
+                            <span class="armario-card-sub">${escaparHtml(subLinha)}</span>
                         </div>
                     </div>
                     <div class="armario-card-actions">
-                        <button type="button" class="armario-card-btn consultar" data-acao="consultar" aria-label="Consultar armário ${armario.numero}">Consultar</button>
-                        <button type="button" class="armario-card-btn abrir" data-acao="abrir" aria-label="${rotuloPrimario} armário ${armario.numero}">${rotuloPrimario}</button>
+                        <button type="button" class="armario-card-btn consultar" data-acao="consultar" aria-label="Consultar armário ${numeroSeguro}">Consultar</button>
+                        <button type="button" class="armario-card-btn abrir" data-acao="abrir" aria-label="${rotuloPrimario} armário ${numeroSeguro}">${rotuloPrimario}</button>
                     </div>
                 `;
                 const botaoConsultar = card.querySelector('[data-acao="consultar"]');
@@ -6500,6 +6508,13 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         }
+        // Só aceita URLs http(s) para atributos src/href montados a partir de
+        // dados da planilha — qualquer outro esquema (javascript:, data: etc.)
+        // vira string vazia.
+        function urlHttpSegura(url) {
+            const texto = String(url ?? '').trim();
+            return /^https?:\/\//i.test(texto) ? texto : '';
+        }
         function obterEstadoBackups() {
             if (!estado.backups) {
                 estado.backups = {
@@ -7128,8 +7143,8 @@
                                     </div>
                                     <div>
                                         <div class="armario-modal-eyebrow">${tipoLabel}</div>
-                                        <h2 class="armario-modal-title">Armário ${armario.numero}</h2>
-                                        <p class="armario-modal-subtitle">${armario.unidade || '-'}</p>
+                                        <h2 class="armario-modal-title">Armário ${escaparHtml(armario.numero || '-')}</h2>
+                                        <p class="armario-modal-subtitle">${escaparHtml(armario.unidade || '-')}</p>
                                     </div>
                                 </div>
                                 <span class="armario-modal-status status-livre">
@@ -7145,6 +7160,7 @@
                         </div>
                     `,
                     showCancelButton: true,
+                    showCloseButton: true,
                     confirmButtonText: 'Abrir agora',
                     cancelButtonText: 'Fechar',
                     reverseButtons: true,
@@ -7164,6 +7180,41 @@
             abrirModalArmario(armario);
         }
 
+        // "Em uso há 2h 15min" — calculado a partir de dataRegistro + horaInicio.
+        // Aceita data em dd/mm/aaaa ou aaaa-mm-dd; sem data válida, assume hoje.
+        function calcularTempoDecorridoUso(armario) {
+            const hora = (armario?.horaInicio || '').toString().trim();
+            const casadaHora = hora.match(/^(\d{1,2}):(\d{2})/);
+            if (!casadaHora) return '';
+            const dataBruta = (armario?.dataRegistro || '').toString().trim();
+            let ano; let mes; let dia;
+            let casadaData = dataBruta.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+            if (casadaData) {
+                dia = Number(casadaData[1]); mes = Number(casadaData[2]); ano = Number(casadaData[3]);
+            } else {
+                casadaData = dataBruta.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (casadaData) {
+                    ano = Number(casadaData[1]); mes = Number(casadaData[2]); dia = Number(casadaData[3]);
+                } else {
+                    const hoje = new Date();
+                    ano = hoje.getFullYear(); mes = hoje.getMonth() + 1; dia = hoje.getDate();
+                }
+            }
+            const inicio = new Date(ano, mes - 1, dia, Number(casadaHora[1]), Number(casadaHora[2]));
+            if (Number.isNaN(inicio.getTime())) return '';
+            const minutos = Math.floor((Date.now() - inicio.getTime()) / 60000);
+            if (!Number.isFinite(minutos) || minutos < 0) return '';
+            if (minutos < 1) return 'agora mesmo';
+            if (minutos < 60) return `há ${minutos}min`;
+            const horas = Math.floor(minutos / 60);
+            const resto = minutos % 60;
+            if (horas < 24) {
+                return resto ? `há ${horas}h ${String(resto).padStart(2, '0')}min` : `há ${horas}h`;
+            }
+            const dias = Math.floor(horas / 24);
+            const horasResto = horas % 24;
+            return horasResto ? `há ${dias}d ${horasResto}h` : `há ${dias}d`;
+        }
         // Ação primária do card: livre abre o fluxo de cadastro/termo;
         // ocupado (inclusive contingência) vai direto para a liberação.
         function executarAcaoPrimariaArmario(armario) {
@@ -7248,6 +7299,13 @@
                 travaRolagem.aplicar();
             }
             elementos.armarioModal.style.display = 'flex';
+            // Operador começa sempre pela busca de prontuário — foco direto
+            // nela poupa um toque a cada cadastro.
+            setTimeout(() => {
+                if (elementos.armarioModal.style.display === 'flex') {
+                    elementos.prontuarioBuscaInput?.focus();
+                }
+            }, 80);
         } else {
             const dadosTermoAtual = armario.termoInfo || {
                 paciente: armario.nomePaciente,
@@ -7265,6 +7323,27 @@
             const termoStatusTexto = formatarStatusTermo(armario.termoStatus);
             const termoPendente = termoStatusNormalizado === 'pendente';
             const termoEmAndamento = termoStatusNormalizado === 'em andamento';
+            // Todos os dados vindos da planilha passam por escape antes de
+            // entrar no HTML do modal (proteção contra HTML/script injetado
+            // em nomes, unidades, contatos etc.).
+            const seguro = {
+                numero: escaparHtml(armario.numero || '-'),
+                unidade: escaparHtml(armario.unidade || '-'),
+                nomePaciente: escaparHtml(armario.nomePaciente || '-'),
+                nomeVisitante: escaparHtml(armario.nomeVisitante || '-'),
+                prontuario: escaparHtml(armario.prontuario || ''),
+                leito: escaparHtml(armario.leito || ''),
+                whatsapp: escaparHtml(armario.whatsapp || ''),
+                horaInicio: escaparHtml(armario.horaInicio || '-'),
+                horaPrevista: escaparHtml(armario.horaPrevista || '')
+            };
+            const tempoDecorrido = calcularTempoDecorridoUso(armario);
+            // Agilidade: o termo é consultado na liberação/reimpressão — já
+            // aquece o cache de leitura enquanto o operador olha o modal.
+            if (armario.tipo === 'acompanhante') {
+                callGoogleScript('getTermo', montarPayloadTermo(armario, { incluirFinalizados: true }))
+                    .catch(() => {});
+            }
             const grupoContingencia = `contingencia-${normalizarIdentificador(armario.idPlanilha || armario.id || armario.numero)}`;
             if (armario.fotoContingenciaUrl) {
                 registrarGaleriaImagem(grupoContingencia, [{
@@ -7276,12 +7355,13 @@
                     responsavel: armario.nomeVisitante || ''
                 }]);
             }
-            const fotoContingenciaHtml = armario.fotoContingenciaUrl
+            const fotoContingenciaUrlSegura = urlHttpSegura(armario.fotoContingenciaUrl);
+            const fotoContingenciaHtml = fotoContingenciaUrlSegura
                 ? `<div class="armario-foto">
                         <strong>Foto da contingência:</strong>
                         <div class="armario-foto-thumb">
-                            <button type="button" class="foto-contingencia-btn" data-imagem-modal="true" data-image-group="${grupoContingencia}" data-image-index="0">
-                                <img src="${armario.fotoContingenciaUrl}" alt="Foto registrada da contingência" loading="lazy">
+                            <button type="button" class="foto-contingencia-btn" data-imagem-modal="true" data-image-group="${escaparHtml(grupoContingencia)}" data-image-index="0">
+                                <img src="${escaparHtml(fotoContingenciaUrlSegura)}" alt="Foto registrada da contingência" loading="lazy">
                             </button>
                         </div>
                     </div>`
@@ -7307,58 +7387,77 @@
                         <div class="armario-modal-termo-text">${termoAviso}</div>
                     </div>`
                     : '';
-                const dataRegistroFormatada = formatarDataComDiaSemana(armario.dataRegistro);
+                const dataRegistroFormatada = escaparHtml(formatarDataComDiaSemana(armario.dataRegistro));
                 const dataRegistroHtml = `<p><span class="armario-modal-label">Data</span><span class="armario-modal-value">${dataRegistroFormatada}</span></p>`;
                 const statusNormalizado = normalizarTexto(armario.status).replace(/\s+/g, '-');
-                const botoesApoio = `
-                    <div class="armario-modal-actions">
-                        ${armario.tipo === 'acompanhante' ? '<button id="btn-imagens-armario" class="armario-modal-action-btn" type="button">Registros em imagens</button>' : ''}
-                        ${armario.tipo === 'visitante' ? '<button id="btn-editar-horario" class="armario-modal-action-btn" type="button">Editar horário/visita</button>' : ''}
-                    </div>`;
-                const moverContingenciaHtml = ehContingencia
-                    ? `<div class="armario-modal-actions"><button id="btn-mover-contingencia" class="armario-modal-action-btn" type="button">Mover para armário livre</button></div>`
-                    : '';
-                const reimpressaoHtml = armario.tipo === 'acompanhante'
-                    ? `<div class="armario-modal-actions"><button id="btn-reimprimir-ticket" class="armario-modal-action-btn" type="button">Reimprimir comprovante</button></div>`
+                // filete do cabeçalho segue a mesma cor do card no Monitor
+                const statusVisualModal = ehContingencia ? 'contingencia' : statusNormalizado;
+                // Ações de apoio agrupadas numa grade única: mesma ordem
+                // sempre, ícone + rótulo, alvo de toque grande.
+                const acoesRapidas = [];
+                if (armario.tipo === 'acompanhante' && termoPendente) {
+                    acoesRapidas.push({ id: 'btn-aplicar-termo', icone: 'fa-file-signature', rotulo: 'Aplicar termo agora', destaque: true });
+                }
+                if (ehContingencia) {
+                    acoesRapidas.push({ id: 'btn-mover-contingencia', icone: 'fa-exchange-alt', rotulo: 'Mover p/ armário livre' });
+                }
+                if (armario.tipo === 'visitante') {
+                    acoesRapidas.push({ id: 'btn-editar-horario', icone: 'fa-clock', rotulo: 'Editar horário/visita' });
+                }
+                if (armario.tipo === 'acompanhante') {
+                    acoesRapidas.push({ id: 'btn-imagens-armario', icone: 'fa-images', rotulo: 'Registros em imagens' });
+                    acoesRapidas.push({ id: 'btn-reimprimir-ticket', icone: 'fa-print', rotulo: 'Reimprimir comprovante' });
+                }
+                const acoesRapidasHtml = acoesRapidas.length
+                    ? `<div class="armario-modal-quick-grid">
+                        ${acoesRapidas.map(acao => `
+                            <button id="${acao.id}" class="armario-modal-quick-btn${acao.destaque ? ' destaque' : ''}" type="button">
+                                <i class="fas ${acao.icone}" aria-hidden="true"></i>
+                                <span>${acao.rotulo}</span>
+                            </button>`).join('')}
+                    </div>`
                     : '';
                 Swal.fire({
                     html: `
                         <div class="armario-modal-card">
-                            <header class="armario-modal-header">
+                            <header class="armario-modal-header status-${statusVisualModal}">
                                 <div class="armario-modal-hero">
                                     <div class="armario-modal-icon">
                                         <i class="fas fa-lock" aria-hidden="true"></i>
                                     </div>
                                     <div>
                                         <div class="armario-modal-eyebrow">${armario.tipo === 'acompanhante' ? 'Acompanhante' : 'Visitante'}</div>
-                                        <h2 class="armario-modal-title">Armário ${armario.numero}</h2>
-                                        <p class="armario-modal-subtitle">${armario.unidade || '-'}</p>
+                                        <h2 class="armario-modal-title">Armário ${seguro.numero}</h2>
+                                        <p class="armario-modal-subtitle">${seguro.unidade}</p>
                                     </div>
                                 </div>
-                                <span class="armario-modal-status status-${statusNormalizado}">
-                                    <span class="armario-modal-status-dot" aria-hidden="true"></span>
-                                    ${formatarStatusArmario(armario.status)}
-                                </span>
+                                <div class="armario-modal-status-wrap">
+                                    <span class="armario-modal-status status-${statusNormalizado}">
+                                        <span class="armario-modal-status-dot" aria-hidden="true"></span>
+                                        ${formatarStatusArmario(armario.status)}
+                                    </span>
+                                    ${tempoDecorrido ? `<span class="armario-modal-tempo"><i class="fas fa-hourglass-half" aria-hidden="true"></i> Em uso ${escaparHtml(tempoDecorrido)}</span>` : ''}
+                                </div>
                             </header>
                             <div class="armario-modal-grid">
                                 <div class="armario-modal-patient">
                                     <span class="armario-modal-label">Paciente</span>
-                                    <span class="armario-modal-patient-name">${armario.nomePaciente || '-'}</span>
+                                    <span class="armario-modal-patient-name">${seguro.nomePaciente}</span>
                                     <span class="armario-modal-patient-sub">
-                                        ${armario.prontuario ? `Prontuário ${armario.prontuario}` : 'Sem prontuário'}
-                                        ${armario.leito ? ` • Leito ${armario.leito}` : ''}
+                                        ${seguro.prontuario ? `Prontuário ${seguro.prontuario}` : 'Sem prontuário'}
+                                        ${seguro.leito ? ` • Leito ${seguro.leito}` : ''}
                                     </span>
                                     <span class="armario-modal-visitor">
-                                        ${armario.tipo === 'acompanhante' ? 'Acompanhante' : 'Visitante'}: ${armario.nomeVisitante || '-'}
+                                        ${armario.tipo === 'acompanhante' ? 'Acompanhante' : 'Visitante'}: ${seguro.nomeVisitante}
                                     </span>
                                 </div>
                                 <div class="armario-modal-chips">
-                                    <span class="armario-modal-chip">Volumes: ${formatarVolumeParaExibicao(armario.volumes)}</span>
-                                    ${armario.whatsapp ? `<span class="armario-modal-chip">WhatsApp: ${armario.whatsapp}</span>` : ''}
-                                    <span class="armario-modal-chip">Desde ${armario.horaInicio || '-'}</span>
+                                    <span class="armario-modal-chip">Volumes: ${escaparHtml(formatarVolumeParaExibicao(armario.volumes))}</span>
+                                    ${seguro.whatsapp ? `<span class="armario-modal-chip">WhatsApp: ${seguro.whatsapp}</span>` : ''}
+                                    <span class="armario-modal-chip">Desde ${seguro.horaInicio}</span>
                                     ${armario.visitaEstendida
                                         ? `<span class="armario-modal-chip">Visita estendida</span>`
-                                        : (armario.horaPrevista ? `<span class="armario-modal-chip">Prev. saída ${armario.horaPrevista}</span>` : '')}
+                                        : (seguro.horaPrevista ? `<span class="armario-modal-chip">Prev. saída ${seguro.horaPrevista}</span>` : '')}
                                 </div>
                             </div>
                             <div class="armario-modal-section">
@@ -7366,16 +7465,14 @@
                             </div>
                             ${ehContingencia ? `<div class="armario-modal-section">${fotoContingenciaHtml}</div>` : ''}
                             ${termoHtml ? `<div class="armario-modal-section">${termoHtml}</div>` : ''}
-                            ${botoesApoio}
-                            ${moverContingenciaHtml}
-                            ${reimpressaoHtml}
-                            ${armario.tipo === 'acompanhante' && termoPendente ? `<div class="armario-modal-actions"><button id="btn-aplicar-termo" class="armario-modal-primary-inline" type="button">Aplicar termo agora</button></div>` : ''}
+                            ${acoesRapidasHtml}
                         </div>
                     `,
                     showCancelButton: true,
                     showDenyButton: armario.tipo === 'acompanhante',
-                    confirmButtonText: 'Liberar Armário',
-                    denyButtonText: 'Movimentações',
+                    showCloseButton: true,
+                    confirmButtonText: '<i class="fas fa-unlock" aria-hidden="true"></i> Liberar Armário',
+                    denyButtonText: '<i class="fas fa-dolly" aria-hidden="true"></i> Movimentações',
                     cancelButtonText: 'Fechar',
                     reverseButtons: true,
                     buttonsStyling: false,
@@ -7482,7 +7579,7 @@
 
             const optionsHtml = livres.map(item => {
                 const unidadeTexto = item.unidade ? ` - ${item.unidade}` : '';
-                return `<option value="${item.id}">${item.numero}${unidadeTexto}</option>`;
+                return `<option value="${escaparHtml(item.id)}">${escaparHtml(`${item.numero}${unidadeTexto}`)}</option>`;
             }).join('');
 
             const resultado = await Swal.fire({
@@ -7612,12 +7709,12 @@
             const horaAtual = armario.horaPrevista || '';
 
             const resultado = await Swal.fire({
-                title: `Editar horário - Armário ${armario.numero}`,
+                title: `Editar horário - Armário ${escaparHtml(armario.numero || '')}`,
                 html: `
                     <div class="swal-form-grid">
                         <div class="swal-form-group">
                             <label for="editar-hora-prevista">Previsão de saída</label>
-                            <input type="time" id="editar-hora-prevista" class="swal2-input" value="${horaAtual}" ${visitaEstendidaAtual ? 'disabled' : ''}>
+                            <input type="time" id="editar-hora-prevista" class="swal2-input" value="${escaparHtml(horaAtual)}" ${visitaEstendidaAtual ? 'disabled' : ''}>
                         </div>
                         <div class="swal-form-group">
                             <label class="swal2-checkbox" style="margin-top:12px;">
@@ -7713,7 +7810,7 @@
             const htmlCamposVisitante = `
                 <div class="swal-form-group">
                     <label for="editar-hora-prevista">Previsão de saída</label>
-                    <input type="time" id="editar-hora-prevista" class="swal2-input" value="${horaPrevistaAtual}" ${visitaEstendidaAtual ? 'disabled' : ''}>
+                    <input type="time" id="editar-hora-prevista" class="swal2-input" value="${escaparHtml(horaPrevistaAtual)}" ${visitaEstendidaAtual ? 'disabled' : ''}>
                 </div>
                 <div class="swal-form-group">
                     <label class="swal2-checkbox" style="margin-top:12px;">
@@ -7724,29 +7821,29 @@
             const htmlObservacoes = tipoNormalizado === 'acompanhante'
                 ? `<div class="swal-form-group">
                         <label for="editar-observacoes">Observações</label>
-                        <textarea id="editar-observacoes" class="swal2-textarea" placeholder="Anotações adicionais">${armario.observacoes || ''}</textarea>
+                        <textarea id="editar-observacoes" class="swal2-textarea" placeholder="Anotações adicionais">${escaparHtml(armario.observacoes || '')}</textarea>
                    </div>`
                 : '';
 
             const resultado = await Swal.fire({
-                title: `Editar dados - Armário ${armario.numero}`,
+                title: `Editar dados - Armário ${escaparHtml(armario.numero || '')}`,
                 html: `
                     <div class="swal-form-grid">
                         <div class="swal-form-group">
                             <label for="editar-nome-visitante">${tipoNormalizado === 'acompanhante' ? 'Nome do acompanhante' : 'Nome do visitante'}</label>
-                            <input type="text" id="editar-nome-visitante" class="swal2-input" value="${armario.nomeVisitante || ''}" required>
+                            <input type="text" id="editar-nome-visitante" class="swal2-input" value="${escaparHtml(armario.nomeVisitante || '')}" required>
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-nome-paciente">Nome do paciente</label>
-                            <input type="text" id="editar-nome-paciente" class="swal2-input" value="${armario.nomePaciente || ''}" required>
+                            <input type="text" id="editar-nome-paciente" class="swal2-input" value="${escaparHtml(armario.nomePaciente || '')}" required>
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-prontuario">Prontuário</label>
-                            <input type="text" id="editar-prontuario" class="swal2-input" value="${armario.prontuario || ''}" placeholder="Opcional">
+                            <input type="text" id="editar-prontuario" class="swal2-input" value="${escaparHtml(armario.prontuario || '')}" placeholder="Opcional">
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-leito">Leito</label>
-                            <input type="text" id="editar-leito" class="swal2-input" value="${armario.leito || ''}" required>
+                            <input type="text" id="editar-leito" class="swal2-input" value="${escaparHtml(armario.leito || '')}" required>
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-volumes">Volumes</label>
@@ -7754,7 +7851,7 @@
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-whatsapp">WhatsApp</label>
-                            <input type="tel" id="editar-whatsapp" class="swal2-input" value="${armario.whatsapp || ''}" placeholder="(00) 00000-0000">
+                            <input type="tel" id="editar-whatsapp" class="swal2-input" value="${escaparHtml(armario.whatsapp || '')}" placeholder="(00) 00000-0000">
                         </div>
                         ${tipoNormalizado === 'visitante' ? htmlCamposVisitante : ''}
                         ${htmlObservacoes}
@@ -8500,8 +8597,8 @@
                 .filter(par => Array.isArray(par) && par[1] !== null && par[1] !== undefined && String(par[1]).trim() !== '')
                 .map(([rotulo, valor]) => `
                     <div class="resumo-row">
-                        <span class="resumo-label">${rotulo}</span>
-                        <span class="resumo-value">${valor}</span>
+                        <span class="resumo-label">${escaparHtml(rotulo)}</span>
+                        <span class="resumo-value">${escaparHtml(valor)}</span>
                     </div>`).join('');
             return `<div class="resumo-list">${linhas}</div>`;
         }
@@ -9773,7 +9870,7 @@
         }
         async function coletarAssinaturaEncerramento(nomeAcompanhante) {
             const nomeTratado = (nomeAcompanhante || '').toString().trim();
-            const textoAssinante = nomeTratado ? `<strong>${nomeTratado}</strong>` : 'o acompanhante';
+            const textoAssinante = nomeTratado ? `<strong>${escaparHtml(nomeTratado)}</strong>` : 'o acompanhante';
             let controlador = null;
             let botaoLimpar = null;
             let limparHandler = null;
@@ -10780,7 +10877,10 @@
         }
         function registrarGaleriaImagem(grupo, itens = []) {
             if (!grupo) return;
-            galeriasImagem[grupo] = Array.isArray(itens) ? itens.filter(item => item && item.url) : [];
+            // aceita apenas URLs http(s) — nada de data:/javascript: vindos da planilha
+            galeriasImagem[grupo] = Array.isArray(itens)
+                ? itens.filter(item => item && urlHttpSegura(item.url))
+                : [];
         }
         function obterItemGaleriaImagem(grupo, indice) {
             const itens = galeriasImagem[grupo];
@@ -10922,22 +11022,24 @@
 
             const grupoGaleria = `armario-${normalizarIdentificador(armario.idPlanilha || armario.id || armario.numero)}-${Date.now()}`;
             registrarGaleriaImagem(grupoGaleria, imagens);
-            const resumo = `<div class="registro-imagens-resumo"><span>Armário <strong>${armario.numero || '-'}</strong></span><span>${imagens.length} registro(s)</span></div>`;
+            const resumo = `<div class="registro-imagens-resumo"><span>Armário <strong>${escaparHtml(armario.numero || '-')}</strong></span><span>${imagens.length} registro(s)</span></div>`;
             const conteudoImagens = imagens.length
-                ? `<div class="registro-imagens-grid">${imagens.map((item, indice) => `
+                ? `<div class="registro-imagens-grid">${imagens.map((item, indice) => {
+                        const urlSegura = urlHttpSegura(item.url);
+                        return `
                         <article class="registro-imagem-card">
                             <div class="registro-imagem-info">
-                                <p class="registro-imagem-contexto">${item.contexto || ''}</p>
-                                <h4 class="registro-imagem-titulo">${item.titulo}</h4>
-                                ${item.detalhe ? `<p class="registro-imagem-detalhe">${item.detalhe}</p>` : ''}
+                                <p class="registro-imagem-contexto">${escaparHtml(item.contexto || '')}</p>
+                                <h4 class="registro-imagem-titulo">${escaparHtml(item.titulo || '')}</h4>
+                                ${item.detalhe ? `<p class="registro-imagem-detalhe">${escaparHtml(item.detalhe)}</p>` : ''}
                                 <div class="registro-imagem-meta">
-                                    ${item.dataHora ? `<span><i class="fas fa-clock"></i> ${item.dataHora}</span>` : ''}
-                                    ${item.responsavel ? `<span><i class="fas fa-user"></i> ${item.responsavel}</span>` : ''}
+                                    ${item.dataHora ? `<span><i class="fas fa-clock"></i> ${escaparHtml(item.dataHora)}</span>` : ''}
+                                    ${item.responsavel ? `<span><i class="fas fa-user"></i> ${escaparHtml(item.responsavel)}</span>` : ''}
                                 </div>
-                                <a class="registro-imagem-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Abrir imagem</a>
+                                ${urlSegura ? `<a class="registro-imagem-link" href="${escaparHtml(urlSegura)}" target="_blank" rel="noopener noreferrer">Abrir imagem</a>` : ''}
                             </div>
-                        </article>
-                    `).join('')}</div>`
+                        </article>`;
+                    }).join('')}</div>`
                 : '<div class="registro-imagens-vazia">Nenhum registro em imagem encontrado para este armário.</div>';
 
             Swal.update({
@@ -10993,19 +11095,19 @@
             const responsavelTexto = item.responsavel ? item.responsavel : 'Não informado';
             const assinaturaSrc = montarFonteAssinaturaCliente(item.assinatura, item.assinaturaMime || 'image/png');
             const assinaturaHtml = assinaturaSrc
-                ? `<span class="mov-assinatura-preview"><img src="${assinaturaSrc}" alt="Assinatura de ${responsavelTexto}"></span>`
-                : `<span class="mov-assinatura-texto">${responsavelTexto}</span>`;
+                ? `<span class="mov-assinatura-preview"><img src="${escaparHtml(assinaturaSrc)}" alt="Assinatura de ${escaparHtml(responsavelTexto)}"></span>`
+                : `<span class="mov-assinatura-texto">${escaparHtml(responsavelTexto)}</span>`;
             const itensDetalhe = normalizarListaItensMovimentacao(item.itens);
             const itensHtml = itensDetalhe.length
-                ? `<ul class="movimentacao-itens-detalhe">${itensDetalhe.map(it => `<li>${Number(it.quantidade)}x ${it.descricao}</li>`).join('')}</ul>`
+                ? `<ul class="movimentacao-itens-detalhe">${itensDetalhe.map(it => `<li>${Number(it.quantidade)}x ${escaparHtml(it.descricao)}</li>`).join('')}</ul>`
                 : '';
             bloco.innerHTML = `
                 <div class="movimentacao-header">
-                    <span>${formatarTituloMovimento(item.tipo)}</span>
-                    <span>${formatarData(item.data)} ${item.hora}</span>
+                    <span>${escaparHtml(formatarTituloMovimento(item.tipo))}</span>
+                    <span>${escaparHtml(`${formatarData(item.data)} ${item.hora || ''}`)}</span>
                 </div>
                 <div class="movimentacao-meta">
-                    <span><strong>Descrição:</strong> ${item.descricao}</span>
+                    <span><strong>Descrição:</strong> ${escaparHtml(item.descricao || '')}</span>
                     <span class="mov-assinatura-bloco"><strong>Assinatura:</strong> ${assinaturaHtml}</span>
                 </div>
                 ${itensHtml}
@@ -11288,13 +11390,40 @@
                     : ['Previsão de saída', armario.horaPrevista || ''],
                 ['WhatsApp', armario.whatsapp || '']
             ]);
+            const tempoUsoLiberacao = calcularTempoDecorridoUso(armario);
             const resultado = await Swal.fire({
-                title: `Encerrar armário ${armario.numero}?`,
-                html: `${resumoHtml}<p class="resumo-confirmacao-texto">Confirme que as informações estão corretas para finalizar o armário do visitante.</p>`,
-                icon: 'question',
+                html: `
+                    <div class="armario-modal-card liberacao-confirm">
+                        <header class="armario-modal-header status-livre">
+                            <div class="armario-modal-hero">
+                                <div class="armario-modal-icon liberar">
+                                    <i class="fas fa-unlock" aria-hidden="true"></i>
+                                </div>
+                                <div>
+                                    <div class="armario-modal-eyebrow">Encerrar custódia • Visitante</div>
+                                    <h2 class="armario-modal-title">Armário ${escaparHtml(armario.numero || '-')}</h2>
+                                    ${tempoUsoLiberacao ? `<p class="armario-modal-subtitle">Em uso ${escaparHtml(tempoUsoLiberacao)}</p>` : ''}
+                                </div>
+                            </div>
+                        </header>
+                        ${resumoHtml}
+                        <div class="liberacao-aviso">
+                            <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                            <span>Confira os dados acima. Ao confirmar, a custódia é finalizada e o armário volta a ficar livre.</span>
+                        </div>
+                    </div>
+                `,
                 showCancelButton: true,
-                confirmButtonText: 'Confirmo a liberação',
+                showCloseButton: true,
+                confirmButtonText: '<i class="fas fa-check" aria-hidden="true"></i> Confirmo a liberação',
                 cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'armario-modal-popup',
+                    confirmButton: 'armario-modal-primary',
+                    cancelButton: 'armario-modal-tertiary'
+                },
                 focusConfirm: false
             });
             if (!resultado.isConfirmed) {
@@ -11417,17 +11546,41 @@
 
             const termoPromise = carregarTermo();
 
+            const tempoUsoLiberacao = calcularTempoDecorridoUso(armario);
             const resultadoConfirmacao = await Swal.fire({
-                title: `Encerrar armário ${armario.numero}?`,
                 html: `
-                    <div id="${resumoId}">${gerarResumoHtml(null)}</div>
-                    <p id="${statusId}" class="liberacao-status liberacao-status--loading">Buscando dados do termo...</p>
-                    <p style="margin-top:12px; color:#4b5563;">Confirme que as informações estão corretas para finalizar o armário do acompanhante.</p>
+                    <div class="armario-modal-card liberacao-confirm">
+                        <header class="armario-modal-header status-livre">
+                            <div class="armario-modal-hero">
+                                <div class="armario-modal-icon liberar">
+                                    <i class="fas fa-unlock" aria-hidden="true"></i>
+                                </div>
+                                <div>
+                                    <div class="armario-modal-eyebrow">Encerrar custódia • Acompanhante</div>
+                                    <h2 class="armario-modal-title">Armário ${escaparHtml(armario.numero || '-')}</h2>
+                                    ${tempoUsoLiberacao ? `<p class="armario-modal-subtitle">Em uso ${escaparHtml(tempoUsoLiberacao)}</p>` : ''}
+                                </div>
+                            </div>
+                        </header>
+                        <div id="${resumoId}">${gerarResumoHtml(null)}</div>
+                        <p id="${statusId}" class="liberacao-status liberacao-status--loading">Buscando dados do termo...</p>
+                        <div class="liberacao-aviso">
+                            <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                            <span>Após confirmar, será coletada a assinatura de encerramento do acompanhante para finalizar o termo e liberar o armário.</span>
+                        </div>
+                    </div>
                 `,
-                icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Confirmo a liberação',
+                showCloseButton: true,
+                confirmButtonText: '<i class="fas fa-check" aria-hidden="true"></i> Confirmo a liberação',
                 cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'armario-modal-popup',
+                    confirmButton: 'armario-modal-primary',
+                    cancelButton: 'armario-modal-tertiary'
+                },
                 focusConfirm: false,
                 willOpen: () => atualizarResumoModal('carregando')
             });
