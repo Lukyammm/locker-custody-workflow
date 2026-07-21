@@ -4936,6 +4936,14 @@ function salvarTermoCompleto(dadosTermo) {
 
     if (sheetAcompanhantes) {
       estruturaAcompanhantes = obterEstruturaPlanilha(sheetAcompanhantes);
+      // Garante a coluna de prontuário ANTES de ler/gravar. O schema padrão
+      // da aba Acompanhantes não tem essa coluna, e esta função (cadastro do
+      // acompanhante via termo) era a única que gravava o prontuário sem
+      // garantir a coluna — a escrita era descartada e o número sumia depois
+      // de salvar. Chamando garantir aqui, a leitura (getDataRange abaixo) e a
+      // gravação passam a enxergar a mesma coluna. Feito antes do getDataRange
+      // para que as linhas lidas já incluam a coluna recém-criada.
+      estruturaAcompanhantes = garantirColunaProntuario(sheetAcompanhantes, estruturaAcompanhantes);
       dadosAcompanhantes = sheetAcompanhantes.getDataRange().getValues();
       for (var indiceA = 1; indiceA < dadosAcompanhantes.length; indiceA++) {
         var linha = dadosAcompanhantes[indiceA];
