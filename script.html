@@ -4726,6 +4726,13 @@
                 const filtro = normalizarTexto(botao.dataset.filter) || 'todos';
                 botao.classList.toggle('active', ativos.includes(filtro));
             });
+            // Os chips do Estado Geral também mostram o filtro ativo — no
+            // celular eles são a única fileira de filtros visível.
+            if (elementos.cardsHero) {
+                elementos.cardsHero.querySelectorAll('.card[data-filter]').forEach(chip => {
+                    chip.classList.toggle('is-active', ativos.includes(normalizarTexto(chip.dataset.filter)));
+                });
+            }
         }
         function alternarFiltroDashboard(filtroSelecionado) {
             const filtroNormalizado = normalizarTexto(filtroSelecionado);
@@ -4753,7 +4760,12 @@
             if (!filtroNormalizado) return;
             const permitidos = new Set(obterFiltrosPermitidosPorPerfil());
             if (!permitidos.has(filtroNormalizado)) return;
-            estado.filtrosSelecionados = [filtroNormalizado];
+            // Toque no chip já ativo desfaz o filtro (volta para "todos") —
+            // essencial no celular, onde a fileira com "Todos" fica oculta.
+            const atuais = obterFiltrosAtivosDashboard().map(normalizarTexto);
+            estado.filtrosSelecionados = (atuais.length === 1 && atuais[0] === filtroNormalizado)
+                ? ['todos']
+                : [filtroNormalizado];
             atualizarBotoesFiltroDashboard();
             renderizarArmarios();
         }
