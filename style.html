@@ -4322,6 +4322,149 @@
                 align-items: flex-start;
             }
         }
+
+        /* ── Monitor mobile-first: topo enxuto + cartões compactos ── */
+        /* Chip do Estado Geral com estado ativo (vale para todas as telas:
+           no celular eles são a única fileira de filtros visível). */
+        .cards-hero .card.is-active {
+            background: color-mix(in srgb, var(--primary-color) 13%, transparent);
+            box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--primary-color) 50%, transparent);
+        }
+        @media (max-width: 640px) {
+            .main-content {
+                padding: 12px 12px 20px;
+            }
+            /* Estado Geral: linha única rolável; o título sai (os chips com
+               contagem se explicam sozinhos) */
+            .cards-hero.estado-geral {
+                padding: 10px 12px;
+                gap: 8px;
+                border-radius: 16px;
+            }
+            .estado-geral-titulo {
+                display: none;
+            }
+            .estado-geral-chips {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                justify-content: flex-start;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                width: 100%;
+                gap: 4px;
+            }
+            .estado-geral-chips::-webkit-scrollbar {
+                display: none;
+            }
+            .cards-hero .card {
+                flex-shrink: 0;
+            }
+            .btn-gestao-contingencia {
+                width: 100%;
+                justify-content: center;
+                padding: 9px 14px;
+                font-size: 0.88rem;
+            }
+            .monitor-busca {
+                margin-bottom: 12px;
+            }
+            .filter-search.monitor-busca-hero {
+                padding: 4px 10px 4px 6px;
+                box-shadow: 0 8px 22px color-mix(in srgb, var(--shadow-color) 70%, transparent);
+            }
+            .filter-search.monitor-busca-hero input {
+                font-size: 1rem;
+                padding: 8px 4px;
+            }
+            .filter-search.monitor-busca-hero i {
+                font-size: 0.95rem;
+                padding: 10px;
+            }
+            /* A fileira de filtros duplica os chips do Estado Geral — no
+               celular ela sai e os chips assumem (toque de novo = "todos"). */
+            .filters {
+                display: none;
+            }
+            .armarios-grid {
+                gap: 8px;
+            }
+            .armarios-divisor {
+                margin: 4px 0;
+            }
+            /* Cartão de armário em formato de lista compacta:
+               número + status em cima, paciente embaixo, Liberar à direita.
+               O toque no corpo do cartão consulta (o botão Consultar some). */
+            .armario-card {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas:
+                    "topo acao"
+                    "info acao";
+                align-items: center;
+                gap: 2px 10px;
+                padding: 10px 12px 10px 16px;
+                border-radius: 14px;
+            }
+            .armario-card .armario-status-bar {
+                top: 0;
+                bottom: 0;
+                left: 0;
+                right: auto;
+                width: 5px;
+                height: auto;
+            }
+            .armario-card-top {
+                grid-area: topo;
+                align-items: center;
+                gap: 8px;
+            }
+            .armario-number.prominent {
+                font-size: 1.15rem;
+            }
+            .armario-status-pill {
+                font-size: 0.62rem;
+                padding: 3px 8px;
+            }
+            .armario-card-info {
+                grid-area: info;
+                min-height: 0;
+                gap: 0;
+            }
+            /* especificidade dupla: o ícone carrega classes status-* que uma
+               regra genérica de badges (.status-em-uso etc.) estiliza com
+               display:inline-flex mais adiante no arquivo */
+            .armario-card .armario-status-icon {
+                display: none;
+            }
+            .armario-card-textos {
+                gap: 0;
+            }
+            .armario-card-nome {
+                font-size: 0.92rem;
+            }
+            .armario-card-sub {
+                font-size: 0.78rem;
+            }
+            .armario-card-actions {
+                grid-area: acao;
+                display: flex;
+                margin: 0;
+            }
+            .armario-card-btn.consultar {
+                display: none;
+            }
+            .armario-card-btn.abrir {
+                min-height: 46px;
+                min-width: 84px;
+                padding: 10px 14px;
+                font-size: 0.72rem;
+                border-radius: 12px;
+            }
+            /* Sem elevação no hover preso do toque (o :active dá o feedback) */
+            .armario-card:hover {
+                transform: none;
+            }
+        }
         .modal-scrollable {
             overflow-y: auto;
             max-height: calc(100vh - 160px);
@@ -7811,7 +7954,10 @@
                 border-radius: 18px;
             }
             .estado-geral-chips {
-                justify-content: center;
+                /* flex-start (não center): centralizar conteúdo que estoura um
+                   container rolável torna o lado esquerdo inalcançável — o
+                   chip "Ocupados" ficava cortado e sem como rolar até ele. */
+                justify-content: flex-start;
                 width: 100%;
             }
             .cards-hero .card {

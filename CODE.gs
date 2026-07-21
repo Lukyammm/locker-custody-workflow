@@ -205,6 +205,32 @@ function definirValorLinhaFlexivel(linha, estrutura, chaves, valor) {
 var CABECALHOS_WHATSAPP = ['whatsapp', 'wpp', 'whats app', 'whatsap', 'zap'];
 var CABECALHOS_NOME_VISITANTE = ['nome visitante', 'visitante', 'nome do visitante'];
 var CABECALHOS_NOME_ACOMPANHANTE = ['nome acompanhante', 'acompanhante', 'nome do acompanhante', 'responsavel', 'responsável'];
+// Lista flexível para o nome do PACIENTE. Antes o nome era gravado/lido pela
+// chave rígida 'nome paciente': se o cabeçalho da planilha divergisse
+// ('Paciente', 'Nome do Paciente', coluna deslocada), a GRAVAÇÃO era
+// silenciosamente ignorada (definirValorLinha sem fallback) enquanto a LEITURA
+// caía no índice 4 vazio — e o nome aparecia como "-" mesmo tendo sido digitado.
+var CABECALHOS_NOME_PACIENTE = ['nome paciente', 'nome do paciente', 'paciente', 'nome_paciente', 'nomepaciente'];
+// Índice 4 é a posição canônica de "Nome Paciente" nas abas Visitantes e
+// Acompanhantes; usado como fallback comum de leitura E escrita para garantir
+// que os dois lados sempre apontem para a MESMA coluna.
+var INDICE_PADRAO_NOME_PACIENTE = 4;
+function obterIndicePaciente(estrutura) {
+  return obterIndiceColuna(estrutura, CABECALHOS_NOME_PACIENTE, INDICE_PADRAO_NOME_PACIENTE);
+}
+// Gravação garantida do nome do paciente: resolve a coluna pela lista flexível
+// (com o mesmo fallback da leitura) e escreve por índice — nunca "engole" o
+// valor como o definirValorLinha rígido fazia quando o cabeçalho não batia.
+function definirNomePacienteLinha(linha, estrutura, valor) {
+  var indice = obterIndicePaciente(estrutura);
+  if (indice === null || indice === undefined || indice < 0) {
+    return;
+  }
+  while (linha.length <= indice) {
+    linha.push('');
+  }
+  linha[indice] = valor;
+}
 var CABECALHOS_VISITA_ESTENDIDA = ['visita estendida', 'visita extendida', 'visita expandida'];
 var CABECALHOS_OBSERVACOES = ['observacoes', 'observações', 'observacao', 'observação', 'obs'];
 
@@ -2282,7 +2308,7 @@ function getArmariosFromSheet(sheetName, tipo, termosMap, mapaInternacoes) {
   var statusIndex = obterIndiceColuna(estrutura, 'status', 2);
   var nomeChaves = isVisitante ? CABECALHOS_NOME_VISITANTE : CABECALHOS_NOME_ACOMPANHANTE;
   var nomeIndex = obterIndiceColuna(estrutura, nomeChaves, 3);
-  var pacienteIndex = obterIndiceColuna(estrutura, 'nome paciente', 4);
+  var pacienteIndex = obterIndicePaciente(estrutura);
   var leitoIndex = obterIndiceColuna(estrutura, 'leito', 5);
   var volumesIndex = obterIndiceColuna(estrutura, 'volumes', 6);
   var horaInicioIndex = obterIndiceColuna(estrutura, 'hora inicio', 7);
@@ -2580,7 +2606,7 @@ function cadastrarArmario(armarioData) {
 
     definirValorLinha(novaLinha, estrutura, 'status', 'em-uso');
     definirValorLinha(novaLinha, estrutura, nomeChavesCadastro, armarioData.nomeVisitante);
-    definirValorLinha(novaLinha, estrutura, 'nome paciente', armarioData.nomePaciente);
+    definirNomePacienteLinha(novaLinha, estrutura, armarioData.nomePaciente);
     definirValorLinha(novaLinha, estrutura, 'prontuario', armarioData.prontuario || '');
     definirValorLinha(novaLinha, estrutura, 'leito', armarioData.leito);
     definirValorLinha(novaLinha, estrutura, 'volumes', volumes);
@@ -2759,7 +2785,7 @@ function registrarContingencia(dados) {
     definirValorLinha(linhaBase, estrutura, 'numero', numeroContingencia);
     definirValorLinha(linhaBase, estrutura, 'status', 'contingencia');
     definirValorLinha(linhaBase, estrutura, nomeChavesCadastro, dados.nomeAcompanhante || dados.nomeVisitante || '');
-    definirValorLinha(linhaBase, estrutura, 'nome paciente', dados.nomePaciente || '');
+    definirNomePacienteLinha(linhaBase, estrutura, dados.nomePaciente || '');
     definirValorLinha(linhaBase, estrutura, 'prontuario', dados.prontuario || '');
     definirValorLinha(linhaBase, estrutura, 'leito', dados.leito || '');
     definirValorLinha(linhaBase, estrutura, 'volumes', volumes);
@@ -2893,7 +2919,7 @@ function registrarContingenciaTermo(dados) {
     definirValorLinha(linhaBase, estrutura, 'numero', numeroContingencia);
     definirValorLinha(linhaBase, estrutura, 'status', 'contingencia');
     definirValorLinha(linhaBase, estrutura, CABECALHOS_NOME_ACOMPANHANTE, '');
-    definirValorLinha(linhaBase, estrutura, 'nome paciente', '');
+    definirNomePacienteLinha(linhaBase, estrutura, '');
     definirValorLinha(linhaBase, estrutura, 'prontuario', '');
     definirValorLinha(linhaBase, estrutura, 'leito', '');
     definirValorLinha(linhaBase, estrutura, 'volumes', 0);
@@ -3076,7 +3102,7 @@ function atualizarDadosArmario(parametros) {
     var numeroIndex = obterIndiceColuna(estrutura, 'numero', 1);
     var statusIndex = obterIndiceColuna(estrutura, 'status', 2);
     var nomeIndex = obterIndiceColuna(estrutura, sheetName === 'Visitantes' ? CABECALHOS_NOME_VISITANTE : CABECALHOS_NOME_ACOMPANHANTE, 3);
-    var pacienteIndex = obterIndiceColuna(estrutura, 'nome paciente', 4);
+    var pacienteIndex = obterIndicePaciente(estrutura);
     var leitoIndex = obterIndiceColuna(estrutura, 'leito', 5);
     var volumesIndex = obterIndiceColuna(estrutura, 'volumes', 6);
     var horaInicioIndex = obterIndiceColuna(estrutura, 'hora inicio', 7);
@@ -3141,7 +3167,7 @@ function atualizarDadosArmario(parametros) {
     var horaPrevista = sheetName === 'Visitantes' ? (visitaEstendida ? '' : (parametros.horaPrevista ? parametros.horaPrevista.toString().trim() : '')) : '';
 
     definirValorLinha(armarioData, estrutura, sheetName === 'Visitantes' ? CABECALHOS_NOME_VISITANTE : CABECALHOS_NOME_ACOMPANHANTE, nomeVisitante);
-    definirValorLinha(armarioData, estrutura, 'nome paciente', nomePaciente);
+    definirNomePacienteLinha(armarioData, estrutura, nomePaciente);
     definirValorLinha(armarioData, estrutura, 'prontuario', prontuario);
     definirValorLinha(armarioData, estrutura, 'leito', leito);
     definirValorLinha(armarioData, estrutura, 'volumes', volumes);
@@ -3330,7 +3356,7 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
 
     definirCampoComFallback('status', 'livre', statusIndex);
     definirValorLinha(novaLinha, estrutura, nomeColuna, '');
-    definirValorLinha(novaLinha, estrutura, 'nome paciente', '');
+    definirNomePacienteLinha(novaLinha, estrutura, '');
     definirValorLinha(novaLinha, estrutura, 'leito', '');
     definirValorLinha(novaLinha, estrutura, 'volumes', '');
     definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -4348,7 +4374,7 @@ function criarArmariosUso(armarios) {
         definirValorLinha(novaLinha, estrutura, 'numero', armario[1]);
         definirValorLinha(novaLinha, estrutura, 'status', 'livre');
         definirValorLinha(novaLinha, estrutura, nomeChavesCadastro, '');
-        definirValorLinha(novaLinha, estrutura, 'nome paciente', '');
+        definirNomePacienteLinha(novaLinha, estrutura, '');
         definirValorLinha(novaLinha, estrutura, 'leito', '');
         definirValorLinha(novaLinha, estrutura, 'volumes', 0);
         definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -4910,6 +4936,14 @@ function salvarTermoCompleto(dadosTermo) {
 
     if (sheetAcompanhantes) {
       estruturaAcompanhantes = obterEstruturaPlanilha(sheetAcompanhantes);
+      // Garante a coluna de prontuário ANTES de ler/gravar. O schema padrão
+      // da aba Acompanhantes não tem essa coluna, e esta função (cadastro do
+      // acompanhante via termo) era a única que gravava o prontuário sem
+      // garantir a coluna — a escrita era descartada e o número sumia depois
+      // de salvar. Chamando garantir aqui, a leitura (getDataRange abaixo) e a
+      // gravação passam a enxergar a mesma coluna. Feito antes do getDataRange
+      // para que as linhas lidas já incluam a coluna recém-criada.
+      estruturaAcompanhantes = garantirColunaProntuario(sheetAcompanhantes, estruturaAcompanhantes);
       dadosAcompanhantes = sheetAcompanhantes.getDataRange().getValues();
       for (var indiceA = 1; indiceA < dadosAcompanhantes.length; indiceA++) {
         var linha = dadosAcompanhantes[indiceA];
@@ -5066,7 +5100,7 @@ function salvarTermoCompleto(dadosTermo) {
 
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', 'em-uso');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, nomeColunaCadastro, dadosCadastroAcompanhante.nomeVisitante || dadosTermo.acompanhante || '');
-      definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'nome paciente', dadosCadastroAcompanhante.nomePaciente || dadosTermo.paciente || '');
+      definirNomePacienteLinha(linhaAtualizada, estruturaAcompanhantes, dadosCadastroAcompanhante.nomePaciente || dadosTermo.paciente || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'prontuario', dadosCadastroAcompanhante.prontuario || dadosTermo.prontuario || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'leito', dadosCadastroAcompanhante.leito || dadosTermo.leito || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'hora inicio', horaInicioCadastro);
