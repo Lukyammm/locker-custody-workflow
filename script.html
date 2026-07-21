@@ -1340,9 +1340,11 @@
                 const aberto = wrap.classList.toggle('open');
                 pill.setAttribute('aria-expanded', String(aberto));
             });
+            // capture: listeners com stopPropagation (ex.: botões dos cards)
+            // não podem impedir o fechamento ao tocar fora
             document.addEventListener('click', event => {
                 if (!wrap.contains(event.target)) fechar();
-            });
+            }, true);
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape' && wrap.classList.contains('open')) {
                     fechar();
@@ -1646,6 +1648,8 @@
                 }
             });
         }
+        // capture: garante o fechamento mesmo quando o clique acontece em
+        // elementos que chamam stopPropagation (botões dos cards etc.)
         document.addEventListener('click', event => {
             const control = event.target.closest('.selector-control');
             customSelectorStore.forEach(instance => {
@@ -1654,7 +1658,7 @@
                     instance.trigger.setAttribute('aria-expanded', 'false');
                 }
             });
-        });
+        }, true);
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
                 customSelectorStore.forEach(instance => {
