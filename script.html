@@ -686,6 +686,10 @@
             filterSearchWrapper: document.querySelector('.filter-search'),
             filterSearchClear: document.getElementById('dashboard-search-clear'),
             dashboardSearch: document.getElementById('dashboard-search'),
+            buscaFlutuante: document.getElementById('busca-flutuante'),
+            buscaFlutuanteToggle: document.getElementById('busca-flutuante-toggle'),
+            buscaFlutuanteInput: document.getElementById('busca-flutuante-input'),
+            buscaFlutuanteLimpar: document.getElementById('busca-flutuante-limpar'),
             contingenciaButton: document.getElementById('btn-contingencia'),
             cardsHero: document.querySelector('.cards-hero'),
             cardProximo: document.querySelector('.card.proximo'),
@@ -3642,6 +3646,12 @@
                 elementos.dashboardSearch.addEventListener('input', () => {
                     estado.buscaDashboard = elementos.dashboardSearch.value || '';
                     atualizarVisibilidadeBotaoLimparBusca();
+                    if (elementos.buscaFlutuanteInput && elementos.buscaFlutuanteInput.value !== estado.buscaDashboard) {
+                        elementos.buscaFlutuanteInput.value = estado.buscaDashboard;
+                        if (elementos.buscaFlutuanteLimpar) {
+                            elementos.buscaFlutuanteLimpar.classList.toggle('visible', estado.buscaDashboard.trim().length > 0);
+                        }
+                    }
                     renderizarArmariosBuscaDebounced();
                 });
             }
@@ -3654,10 +3664,88 @@
                 elementos.filterSearchClear.addEventListener('click', () => {
                     elementos.dashboardSearch.value = '';
                     estado.buscaDashboard = '';
+                    if (elementos.buscaFlutuanteInput) {
+                        elementos.buscaFlutuanteInput.value = '';
+                    }
+                    if (elementos.buscaFlutuanteLimpar) {
+                        elementos.buscaFlutuanteLimpar.classList.remove('visible');
+                    }
                     atualizarVisibilidadeBotaoLimparBusca();
                     renderizarArmarios();
                     elementos.dashboardSearch.focus();
                 });
+            }
+            // Busca flutuante (lupa): reaproveita o mesmo estado (estado.buscaDashboard) e o
+            // mesmo render da busca do topo, para pesquisar sem precisar rolar de volta ao topo.
+            if (elementos.buscaFlutuante && elementos.buscaFlutuanteInput && elementos.buscaFlutuanteToggle) {
+                const atualizarLimparFlutuante = () => {
+                    if (!elementos.buscaFlutuanteLimpar) return;
+                    const possuiTexto = (elementos.buscaFlutuanteInput.value || '').trim().length > 0;
+                    elementos.buscaFlutuanteLimpar.classList.toggle('visible', possuiTexto);
+                };
+
+                let heroForaDaTela = false;
+                const atualizarVisibilidadeBuscaFlutuante = () => {
+                    const mostrar = heroForaDaTela && estado.paginaAtual === 'dashboard';
+                    elementos.buscaFlutuante.classList.toggle('visivel', mostrar);
+                    elementos.buscaFlutuante.setAttribute('aria-hidden', mostrar ? 'false' : 'true');
+                    if (!mostrar) {
+                        elementos.buscaFlutuante.classList.remove('expandido');
+                        elementos.buscaFlutuanteToggle.setAttribute('aria-expanded', 'false');
+                    }
+                };
+                // Exposto para a navegação reavaliar ao entrar/sair do Monitor.
+                estado.atualizarVisibilidadeBuscaFlutuante = atualizarVisibilidadeBuscaFlutuante;
+
+                const heroBusca = document.querySelector('.monitor-busca-hero') || elementos.filterSearchWrapper;
+                if (heroBusca && 'IntersectionObserver' in window) {
+                    const observador = new IntersectionObserver((entradas) => {
+                        heroForaDaTela = !entradas[0].isIntersecting;
+                        atualizarVisibilidadeBuscaFlutuante();
+                    }, { threshold: 0 });
+                    observador.observe(heroBusca);
+                }
+
+                elementos.buscaFlutuanteToggle.addEventListener('click', () => {
+                    const expandir = !elementos.buscaFlutuante.classList.contains('expandido');
+                    elementos.buscaFlutuante.classList.toggle('expandido', expandir);
+                    elementos.buscaFlutuanteToggle.setAttribute('aria-expanded', expandir ? 'true' : 'false');
+                    if (expandir) {
+                        elementos.buscaFlutuanteInput.focus();
+                    }
+                });
+
+                elementos.buscaFlutuanteInput.addEventListener('input', () => {
+                    estado.buscaDashboard = elementos.buscaFlutuanteInput.value || '';
+                    if (elementos.dashboardSearch && elementos.dashboardSearch.value !== estado.buscaDashboard) {
+                        elementos.dashboardSearch.value = estado.buscaDashboard;
+                    }
+                    atualizarVisibilidadeBotaoLimparBusca();
+                    atualizarLimparFlutuante();
+                    renderizarArmariosBuscaDebounced();
+                });
+
+                elementos.buscaFlutuanteInput.addEventListener('keydown', (evento) => {
+                    if (evento.key === 'Escape') {
+                        elementos.buscaFlutuante.classList.remove('expandido');
+                        elementos.buscaFlutuanteToggle.setAttribute('aria-expanded', 'false');
+                        elementos.buscaFlutuanteToggle.focus();
+                    }
+                });
+
+                if (elementos.buscaFlutuanteLimpar) {
+                    elementos.buscaFlutuanteLimpar.addEventListener('click', () => {
+                        elementos.buscaFlutuanteInput.value = '';
+                        estado.buscaDashboard = '';
+                        if (elementos.dashboardSearch) {
+                            elementos.dashboardSearch.value = '';
+                        }
+                        atualizarVisibilidadeBotaoLimparBusca();
+                        atualizarLimparFlutuante();
+                        renderizarArmarios();
+                        elementos.buscaFlutuanteInput.focus();
+                    });
+                }
             }
             if (elementos.contingenciaButton) {
                 elementos.contingenciaButton.addEventListener('click', abrirCadastroContingencia);
@@ -4236,6 +4324,11 @@
             document.querySelector('.header-title h1').textContent = pageTitle;
 
             estado.paginaAtual = pagina;
+
+            // Reavaliar a lupa flutuante (só aparece no Monitor).
+            if (typeof estado.atualizarVisibilidadeBuscaFlutuante === 'function') {
+                estado.atualizarVisibilidadeBuscaFlutuante();
+            }
 
             // Carregar dados específicos da página
             carregarDadosTabelas();
@@ -4843,6 +4936,12 @@
             elementos.armariosContainer.innerHTML = '';
             if (elementos.dashboardSearch && elementos.dashboardSearch.value !== (estado.buscaDashboard || '')) {
                 elementos.dashboardSearch.value = estado.buscaDashboard || '';
+            }
+            if (elementos.buscaFlutuanteInput && elementos.buscaFlutuanteInput.value !== (estado.buscaDashboard || '')) {
+                elementos.buscaFlutuanteInput.value = estado.buscaDashboard || '';
+                if (elementos.buscaFlutuanteLimpar) {
+                    elementos.buscaFlutuanteLimpar.classList.toggle('visible', (estado.buscaDashboard || '').trim().length > 0);
+                }
             }
             const perfilNormalizado = normalizarTexto(estado.perfilAtual);
             const unidadeFiltroNormalizado = normalizarTexto(estado.unidadeAtual);
