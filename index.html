@@ -39,6 +39,9 @@
                             <i class="fas fa-eye" aria-hidden="true"></i>
                         </button>
                     </div>
+                    <div id="login-capslock-aviso" class="login-capslock-aviso hidden" role="status">
+                        <i class="fas fa-triangle-exclamation" aria-hidden="true"></i> Caps Lock ativado
+                    </div>
                 </div>
                 <button type="submit" id="login-submit">
                     <span>Entrar</span>
@@ -46,23 +49,60 @@
                 </button>
             </form>
             <div id="login-feedback" class="login-feedback" role="status" aria-live="polite"></div>
-            <div class="login-help">Precisa de ajuda com o acesso?</div>
+            <button type="button" id="login-esqueci-senha" class="login-link-button">Esqueci minha senha</button>
         </div>
     </div>
-    <script>
-        (function () {
-            var toggle = document.getElementById('login-toggle-senha');
-            var senha = document.getElementById('login-senha');
-            if (!toggle || !senha) return;
-            toggle.addEventListener('click', function () {
-                var showing = senha.type === 'text';
-                senha.type = showing ? 'password' : 'text';
-                toggle.setAttribute('aria-pressed', String(!showing));
-                toggle.setAttribute('aria-label', showing ? 'Mostrar senha' : 'Ocultar senha');
-                toggle.querySelector('i').className = showing ? 'fas fa-eye' : 'fas fa-eye-slash';
-            });
-        })();
-    </script>
+    <div class="modal" id="reset-senha-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-header-icon" aria-hidden="true"><i class="fas fa-key"></i></span>
+                <div class="modal-header-text">
+                    <div class="modal-title">Recuperar senha</div>
+                    <div class="modal-subtitle">Enviaremos um código de verificação por e-mail</div>
+                </div>
+                <button class="modal-close" id="reset-senha-modal-close" aria-label="Fechar recuperação de senha">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="reset-senha-form-etapa1">
+                    <div class="form-group">
+                        <label for="reset-senha-login">Usuário ou matrícula</label>
+                        <input type="text" id="reset-senha-login" class="form-control" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="reset-senha-btn-enviar">Enviar código</button>
+                    </div>
+                </form>
+                <form id="reset-senha-form-etapa2" class="hidden">
+                    <div class="field-hint">Digite o código recebido por e-mail e defina sua nova senha.</div>
+                    <div class="form-group">
+                        <label for="reset-senha-codigo">Código de verificação</label>
+                        <input type="text" id="reset-senha-codigo" class="form-control" inputmode="numeric" maxlength="6" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-senha-nova">Nova senha</label>
+                        <div class="login-input-wrap">
+                            <input type="password" id="reset-senha-nova" class="form-control" autocomplete="new-password" required>
+                            <button type="button" class="login-toggle-senha" id="reset-senha-nova-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="reset-senha-confirmar">Confirmar nova senha</label>
+                        <div class="login-input-wrap">
+                            <input type="password" id="reset-senha-confirmar" class="form-control" autocomplete="new-password" required>
+                            <button type="button" class="login-toggle-senha" id="reset-senha-confirmar-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="reset-senha-btn-confirmar">Redefinir senha</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     <div id="app-shell" class="app-shell hidden">
         <!-- Sidebar -->
         <div class="sidebar">
@@ -976,9 +1016,28 @@
                                 <label for="usuario-email">Matrícula</label>
                                 <input type="text" id="usuario-email" class="form-control" required>
                             </div>
+                            <div class="form-group span-2">
+                                <label for="usuario-email-recuperacao">E-mail de recuperação (opcional)</label>
+                                <input type="email" id="usuario-email-recuperacao" class="form-control" placeholder="nome@exemplo.com">
+                            </div>
                             <div class="form-group">
-                                <label for="usuario-senha">Senha</label>
-                                <input type="password" id="usuario-senha" class="form-control" autocomplete="new-password" required>
+                                <label for="usuario-senha" id="usuario-senha-label">Senha</label>
+                                <div class="login-input-wrap">
+                                    <input type="password" id="usuario-senha" class="form-control" autocomplete="new-password">
+                                    <button type="button" class="login-toggle-senha" id="usuario-senha-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                        <i class="fas fa-eye" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div class="field-hint" id="usuario-senha-hint"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="usuario-senha-confirmar">Confirmar senha</label>
+                                <div class="login-input-wrap">
+                                    <input type="password" id="usuario-senha-confirmar" class="form-control" autocomplete="new-password">
+                                    <button type="button" class="login-toggle-senha" id="usuario-senha-confirmar-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                        <i class="fas fa-eye" aria-hidden="true"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1617,6 +1676,41 @@
                     <input type="url" id="avatar-url" name="avatar-url" placeholder="https://exemplo.com/minha-foto.jpg" autocomplete="off">
                     <button type="button" class="avatar-apply-button" id="avatar-url-apply">Aplicar</button>
                 </div>
+            </div>
+            <div class="avatar-password-section">
+                <h4 class="avatar-modal-title">Alterar minha senha</h4>
+                <form id="alterar-senha-form">
+                    <div class="form-group">
+                        <label for="alterar-senha-atual">Senha atual</label>
+                        <div class="login-input-wrap">
+                            <input type="password" id="alterar-senha-atual" class="form-control" autocomplete="current-password" required>
+                            <button type="button" class="login-toggle-senha" id="alterar-senha-atual-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="alterar-senha-nova">Nova senha</label>
+                        <div class="login-input-wrap">
+                            <input type="password" id="alterar-senha-nova" class="form-control" autocomplete="new-password" required>
+                            <button type="button" class="login-toggle-senha" id="alterar-senha-nova-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="alterar-senha-confirmar">Confirmar nova senha</label>
+                        <div class="login-input-wrap">
+                            <input type="password" id="alterar-senha-confirmar" class="form-control" autocomplete="new-password" required>
+                            <button type="button" class="login-toggle-senha" id="alterar-senha-confirmar-toggle" aria-label="Mostrar senha" aria-pressed="false">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="alterar-senha-btn-salvar">Alterar senha</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
