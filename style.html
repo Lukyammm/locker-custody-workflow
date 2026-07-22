@@ -2737,6 +2737,124 @@
             box-shadow: 0 0 0 6px var(--focus-ring), 0 14px 34px color-mix(in srgb, var(--primary-color) 16%, var(--shadow-color) 84%);
             transform: translateY(-1px);
         }
+        /* Busca flutuante (lupa) — aparece ao rolar para não ter que voltar ao topo (mobile e PC) */
+        .busca-flutuante {
+            position: fixed;
+            right: max(16px, env(safe-area-inset-right));
+            bottom: max(20px, calc(env(safe-area-inset-bottom) + 16px));
+            z-index: var(--z-dropdown);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transform: translateY(12px) scale(0.96);
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+        .busca-flutuante.visivel {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+        .busca-flutuante-campo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 0;
+            max-width: 0;
+            padding: 0;
+            overflow: hidden;
+            opacity: 0;
+            background: var(--surface-color);
+            border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color) 80%);
+            border-radius: 999px;
+            box-shadow: 0 16px 40px color-mix(in srgb, var(--primary-color) 14%, var(--shadow-color) 86%);
+            transition: width 0.28s ease, max-width 0.28s ease, opacity 0.2s ease, padding 0.28s ease;
+        }
+        .busca-flutuante.expandido .busca-flutuante-campo {
+            width: min(72vw, 340px);
+            max-width: min(72vw, 340px);
+            padding: 8px 8px 8px 16px;
+            opacity: 1;
+        }
+        .busca-flutuante-campo > i {
+            color: var(--muted-color);
+            font-size: 0.95rem;
+            flex: 0 0 auto;
+        }
+        .busca-flutuante-campo input {
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--text-color);
+            font-size: 0.95rem;
+            width: 100%;
+            min-width: 0;
+            flex: 1;
+        }
+        .busca-flutuante-campo input::placeholder {
+            color: color-mix(in srgb, var(--muted-color) 80%, transparent);
+        }
+        .busca-flutuante-limpar {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 50%;
+            background: color-mix(in srgb, var(--primary-color) 10%, var(--surface-color) 90%);
+            color: var(--muted-color);
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        .busca-flutuante-limpar.visible {
+            display: inline-flex;
+        }
+        .busca-flutuante-limpar:hover,
+        .busca-flutuante-limpar:focus-visible {
+            color: var(--text-color);
+            background: color-mix(in srgb, var(--primary-color) 18%, var(--surface-color) 82%);
+            outline: none;
+        }
+        .busca-flutuante-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 56px;
+            height: 56px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-dark) 70%, var(--primary-color) 30%));
+            color: var(--color-neutral-0);
+            font-size: 1.25rem;
+            cursor: pointer;
+            box-shadow: 0 16px 34px color-mix(in srgb, var(--primary-color) 30%, var(--shadow-color) 70%);
+            transition: transform 0.2s ease, box-shadow 0.25s ease, width 0.2s ease, height 0.2s ease;
+            touch-action: manipulation;
+        }
+        .busca-flutuante-toggle:hover,
+        .busca-flutuante-toggle:focus-visible {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px color-mix(in srgb, var(--primary-color) 38%, var(--shadow-color) 62%);
+            outline: none;
+        }
+        .busca-flutuante-toggle:focus-visible {
+            box-shadow: 0 0 0 4px var(--focus-ring), 0 16px 34px color-mix(in srgb, var(--primary-color) 30%, var(--shadow-color) 70%);
+        }
+        .busca-flutuante.expandido .busca-flutuante-toggle {
+            width: 48px;
+            height: 48px;
+            font-size: 1.05rem;
+        }
+        @media (max-width: 640px) {
+            .busca-flutuante.expandido .busca-flutuante-campo {
+                width: min(66vw, 250px);
+                max-width: min(66vw, 250px);
+            }
+        }
         /* Tabela de Armários */
         .armarios-grid {
             display: grid;

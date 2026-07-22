@@ -2241,6 +2241,18 @@ function getArmarios(tipo, incluirInternacoes, incluirTermos) {
             termoFinalizado = Boolean(termo.pdfUrl || (termo.assinaturas && termo.assinaturas.finalizadoEm) || statusTermo === 'finalizado');
           }
 
+          // Balde genérico: guarda o termo NÃO finalizado mais recente daquele armário,
+          // independente do número. Serve de fallback quando o número gravado no termo não
+          // bate com o número normalizado do armário em getArmariosFromSheet (o casamento por
+          // número era estrito demais e marcava "pendente" um termo já aplicado). Só guardamos
+          // termos não finalizados para nunca herdar um "finalizado" de um ocupante anterior.
+          if (!termoFinalizado) {
+            var termoGenericoAtual = termosMap[chaveId]['__qualquer_nao_finalizado__'];
+            if (!termoGenericoAtual || (Number(termo.id) || 0) > (Number(termoGenericoAtual.id) || 0)) {
+              termosMap[chaveId]['__qualquer_nao_finalizado__'] = termo;
+            }
+          }
+
           if (!termoAtual) {
             termosMap[chaveId][numeroChave] = termo;
             return;
@@ -2439,6 +2451,12 @@ function getArmariosFromSheet(sheetName, tipo, termosMap, mapaInternacoes) {
         termoRelacionado = termosPorId[chaveNumero] || null;
         if (!termoRelacionado && chaveNumero !== '__sem_numero__') {
           termoRelacionado = termosPorId['__sem_numero__'] || null;
+        }
+        // Fallback tolerante (mesma ideia do getTermo): se o número não casar, usa o termo
+        // não finalizado mais recente daquele armário. Evita o falso "Termo pendente" quando o
+        // número do termo diverge do número do armário.
+        if (!termoRelacionado) {
+          termoRelacionado = termosPorId['__qualquer_nao_finalizado__'] || null;
         }
       }
       if (termoRelacionado) {

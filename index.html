@@ -255,6 +255,19 @@
                 <div class="armarios-grid" id="armarios-container">
                     <!-- Os armários serão carregados aqui via JavaScript -->
                 </div>
+                <!-- Busca flutuante (lupa): aparece ao rolar, para pesquisar sem voltar ao topo -->
+                <div class="busca-flutuante" id="busca-flutuante" aria-hidden="true">
+                    <div class="busca-flutuante-campo">
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                        <input type="text" id="busca-flutuante-input" placeholder="Buscar armário ou paciente..." aria-label="Buscar por paciente, prontuário ou armário">
+                        <button class="busca-flutuante-limpar" id="busca-flutuante-limpar" type="button" aria-label="Limpar busca">
+                            <i class="fas fa-times" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <button class="busca-flutuante-toggle" id="busca-flutuante-toggle" type="button" aria-label="Buscar armário" aria-expanded="false">
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                    </button>
+                </div>
             </div>
             <!-- Visitantes -->
             <div class="page" id="visitantes">
