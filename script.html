@@ -108,7 +108,8 @@
             rascunhoArmario: 'locknac_rascunho_armario',
             rascunhoTermo: 'locknac_rascunho_termo',
             preferenciasCabecalho: 'locknac_preferencias_cabecalho',
-            tema: 'locknac_tema'
+            tema: 'locknac_tema',
+            sistemaInicializado: 'locknac_sistema_inicializado'
         };
         const CAMADAS = {
             modal: 850,
@@ -2826,12 +2827,38 @@
                 exibirSkeletonArmarios();
             }
             try {
-                const inicializacaoPromise = (async () => {
-                    const resultado = await callGoogleScript('verificarInicializacao');
-                    if (!resultado.success || !resultado.inicializado) {
-                        await callGoogleScript('inicializarPlanilha');
+                // A verificação de inicialização é um round-trip ao backend que
+                // bloqueava TODA a carga inicial em cada abertura do app — mas o
+                // sistema, uma vez inicializado, está sempre inicializado. Cacheamos
+                // esse estado no armazenamento local: nas próximas aberturas a
+                // verificação é pulada e os dados carregam imediatamente (em
+                // paralelo), sem o atraso do round-trip. Na primeira vez (ou se o
+                // cache não estiver disponível) a verificação roda normalmente.
+                const armazenamentoInicializacao = obterArmazenamentoLocal();
+                let sistemaJaInicializado = false;
+                if (armazenamentoInicializacao) {
+                    try {
+                        sistemaJaInicializado = armazenamentoInicializacao.getItem(STORAGE_KEYS.sistemaInicializado) === '1';
+                    } catch (erroLeituraInit) {
+                        sistemaJaInicializado = false;
                     }
-                })();
+                }
+
+                const inicializacaoPromise = sistemaJaInicializado
+                    ? Promise.resolve()
+                    : (async () => {
+                        const resultado = await callGoogleScript('verificarInicializacao');
+                        if (!resultado.success || !resultado.inicializado) {
+                            await callGoogleScript('inicializarPlanilha');
+                        }
+                        if (armazenamentoInicializacao) {
+                            try {
+                                armazenamentoInicializacao.setItem(STORAGE_KEYS.sistemaInicializado, '1');
+                            } catch (erroGravaInit) {
+                                // Sem armazenamento: apenas não cacheia; verifica de novo na próxima vez.
+                            }
+                        }
+                    })();
 
                 const carregamentoArmariosPromise = (async () => {
                     await inicializacaoPromise;
