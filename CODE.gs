@@ -1401,6 +1401,12 @@ function converterParaDataHoraIso(valor, padrao) {
 
 var MAX_TENTATIVAS_LOGIN = 5;
 var BLOQUEIO_LOGIN_MINUTOS = 10;
+var TAMANHO_CODIGO_RESET_SENHA = 6;
+var VALIDADE_CODIGO_RESET_SENHA_MINUTOS = 10;
+var MAX_TENTATIVAS_RESET_SENHA = 5;
+var BLOQUEIO_RESET_SENHA_MINUTOS = 10;
+var TAMANHO_MINIMO_SENHA = 6;
+var MENSAGEM_LOGIN_INVALIDO = 'Usuário ou senha inválidos';
 
 function gerarSaltSenha() {
   return Utilities.getUuid();
@@ -1447,6 +1453,22 @@ function validarSenha(senhaInformada, senhaArmazenada) {
   var salt = partes[0];
   var hash = partes.slice(1).join(':');
   return calcularHashSenha(senhaInformada, salt) === hash;
+}
+
+function validarForcaSenha(senha) {
+  var texto = (senha || '').toString();
+  if (texto.length < TAMANHO_MINIMO_SENHA) {
+    return { ok: false, error: 'A senha deve ter pelo menos ' + TAMANHO_MINIMO_SENHA + ' caracteres' };
+  }
+  return { ok: true };
+}
+
+function validarFormatoEmail(email) {
+  var texto = (email || '').toString().trim();
+  if (!texto) {
+    return true;
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto);
 }
 
 function obterCacheLogin() {
@@ -1721,6 +1743,18 @@ function handlePost(e) {
 
       case 'autenticarUsuario':
         return ContentService.createTextOutput(JSON.stringify(autenticarUsuario(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'alterarMinhaSenha':
+        return ContentService.createTextOutput(JSON.stringify(alterarMinhaSenha(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'solicitarResetSenha':
+        return ContentService.createTextOutput(JSON.stringify(solicitarResetSenha(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'confirmarResetSenha':
+        return ContentService.createTextOutput(JSON.stringify(confirmarResetSenha(e.parameter)))
           .setMimeType(ContentService.MimeType.JSON);
 
       case 'registrarContingencia':
@@ -3454,7 +3488,7 @@ function getUsuarios() {
         return { success: true, data: [] };
       }
 
-      var estrutura = obterEstruturaPlanilha(sheet);
+      var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
       var totalColunas = estrutura.ultimaColuna || 10;
       var mapasUnidades = obterMapasUnidades();
       var dados = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
@@ -3481,6 +3515,7 @@ function getUsuarios() {
           id: id,
           nome: obterValorLinha(linha, estrutura, 'nome', ''),
           email: obterValorLinha(linha, estrutura, 'email', ''),
+          emailRecuperacao: obterValorLinhaFlexivel(linha, estrutura, CABECALHOS_EMAIL_RECUPERACAO, ''),
           perfil: perfil,
           acessoVisitantes: converterParaBoolean(obterValorLinha(linha, estrutura, 'acesso visitantes', false)),
           acessoAcompanhantes: converterParaBoolean(obterValorLinha(linha, estrutura, 'acesso acompanhantes', false)),
@@ -3510,6 +3545,7 @@ function cadastrarUsuario(dados) {
     var email = (dados.email || '').toString().trim();
     var perfil = (dados.perfil || '').toString().trim().toLowerCase();
     var senha = (dados.senha || '').toString().trim();
+    var emailRecuperacao = (dados.emailRecuperacao || '').toString().trim();
     var unidadesLista = normalizarListaUnidadesParametro(dados.unidades);
     var unidadesUnicas = [];
     var incluiTodas = false;
@@ -3540,6 +3576,15 @@ function cadastrarUsuario(dados) {
       return { success: false, error: 'Informe uma senha para o usuário' };
     }
 
+    var forcaSenhaCadastro = validarForcaSenha(senha);
+    if (!forcaSenhaCadastro.ok) {
+      return { success: false, error: forcaSenhaCadastro.error };
+    }
+
+    if (!validarFormatoEmail(emailRecuperacao)) {
+      return { success: false, error: 'Informe um e-mail de recuperação válido' };
+    }
+
     if (unidadesUnicas.length === 0 && perfil !== 'admin') {
       return { success: false, error: 'Informe ao menos uma unidade de acesso' };
     }
@@ -3555,7 +3600,7 @@ function cadastrarUsuario(dados) {
       return { success: false, error: 'Aba de usuários não encontrada' };
     }
 
-    var estrutura = obterEstruturaPlanilha(sheet);
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
     var totalColunas = estrutura.ultimaColuna || 10;
     var ultimaLinha = sheet.getLastRow();
     var idIndex = obterIndiceColuna(estrutura, 'id', 0);
@@ -3591,6 +3636,7 @@ function cadastrarUsuario(dados) {
     definirValorLinha(novaLinha, estrutura, 'data cadastro', dataCadastro);
     definirValorLinha(novaLinha, estrutura, 'status', 'ativo');
     definirValorLinha(novaLinha, estrutura, 'senha', criarHashSenha(senha));
+    definirValorLinhaFlexivel(novaLinha, estrutura, CABECALHOS_EMAIL_RECUPERACAO, emailRecuperacao);
     if (!definirValorLinhaFlexivel(novaLinha, estrutura, ['unidades', 'unidade', 'acesso unidades'], unidadesTexto)) {
       definirValorLinha(novaLinha, estrutura, 'unidades', unidadesTexto);
     }
@@ -3609,6 +3655,7 @@ function cadastrarUsuario(dados) {
         id: proximoId,
         nome: nome,
         email: email,
+        emailRecuperacao: emailRecuperacao,
         perfil: perfil,
         acessoVisitantes: acessoVisitantes,
         acessoAcompanhantes: acessoAcompanhantes,
@@ -3640,6 +3687,7 @@ function atualizarUsuario(dados) {
     var email = (dados.email || '').toString().trim();
     var perfil = (dados.perfil || '').toString().trim().toLowerCase();
     var senha = (dados.senha || '').toString().trim();
+    var emailRecuperacao = (dados.emailRecuperacao || '').toString().trim();
     var status = (dados.status || '').toString().trim().toLowerCase();
     var acessoVisitantes = converterParaBoolean(dados.acessoVisitantes);
     var acessoAcompanhantes = converterParaBoolean(dados.acessoAcompanhantes);
@@ -3669,8 +3717,15 @@ function atualizarUsuario(dados) {
       return { success: false, error: 'Nome, matrícula e perfil são obrigatórios' };
     }
 
-    if (!senha) {
-      return { success: false, error: 'Informe a senha do usuário' };
+    if (senha) {
+      var forcaSenhaAtualizar = validarForcaSenha(senha);
+      if (!forcaSenhaAtualizar.ok) {
+        return { success: false, error: forcaSenhaAtualizar.error };
+      }
+    }
+
+    if (!validarFormatoEmail(emailRecuperacao)) {
+      return { success: false, error: 'Informe um e-mail de recuperação válido' };
     }
 
     if (unidadesUnicas.length === 0 && perfil !== 'admin') {
@@ -3691,7 +3746,7 @@ function atualizarUsuario(dados) {
       return { success: false, error: 'Usuário não encontrado' };
     }
 
-    var estrutura = obterEstruturaPlanilha(sheet);
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
     var totalColunas = estrutura.ultimaColuna || 10;
     var idIndex = obterIndiceColuna(estrutura, 'id', 0);
     var ultimaLinha = sheet.getLastRow();
@@ -3708,7 +3763,10 @@ function atualizarUsuario(dados) {
         definirValorLinha(valores[i], estrutura, 'acesso visitantes', acessoVisitantes);
         definirValorLinha(valores[i], estrutura, 'acesso acompanhantes', acessoAcompanhantes);
         definirValorLinha(valores[i], estrutura, 'status', status);
-        definirValorLinha(valores[i], estrutura, 'senha', criarHashSenha(senha));
+        if (senha) {
+          definirValorLinha(valores[i], estrutura, 'senha', criarHashSenha(senha));
+        }
+        definirValorLinhaFlexivel(valores[i], estrutura, CABECALHOS_EMAIL_RECUPERACAO, emailRecuperacao);
         if (!definirValorLinhaFlexivel(valores[i], estrutura, ['unidades', 'unidade', 'acesso unidades'], unidadesTexto)) {
           definirValorLinha(valores[i], estrutura, 'unidades', unidadesTexto);
         }
@@ -3734,6 +3792,7 @@ function atualizarUsuario(dados) {
         id: id,
         nome: nome,
         email: email,
+        emailRecuperacao: emailRecuperacao,
         perfil: perfil,
         acessoVisitantes: acessoVisitantes,
         acessoAcompanhantes: acessoAcompanhantes,
@@ -3819,7 +3878,7 @@ function autenticarUsuario(dados) {
       return { success: false, error: 'Nenhum usuário cadastrado' };
     }
 
-    var estrutura = obterEstruturaPlanilha(sheet);
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
     var totalColunas = estrutura.ultimaColuna || 10;
     var mapasUnidades = obterMapasUnidades();
     var dadosUsuarios = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
@@ -3854,13 +3913,13 @@ function autenticarUsuario(dados) {
 
     if (!linhaUsuario) {
       registrarFalhaLogin(login);
-      return { success: false, error: 'Usuário não encontrado' };
+      return { success: false, error: MENSAGEM_LOGIN_INVALIDO };
     }
 
     var status = obterValorLinha(linhaUsuario, estrutura, 'status', '');
     if (normalizarTextoBasico(status) !== 'ativo') {
       registrarFalhaLogin(login);
-      return { success: false, error: 'Usuário inativo' };
+      return { success: false, error: MENSAGEM_LOGIN_INVALIDO };
     }
 
     var senhaArmazenada = obterValorLinha(linhaUsuario, estrutura, 'senha', '');
@@ -3872,7 +3931,7 @@ function autenticarUsuario(dados) {
 
     if (!validarSenha(senhaInformada, senhaArmazenada)) {
       registrarFalhaLogin(login);
-      return { success: false, error: 'Senha incorreta' };
+      return { success: false, error: MENSAGEM_LOGIN_INVALIDO };
     }
 
     if (!senhaEhHashValido(senhaArmazenada)) {
@@ -3911,6 +3970,222 @@ function autenticarUsuario(dados) {
 
   } catch (error) {
     registrarLog('ERRO', 'Erro ao autenticar usuário: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+function alterarMinhaSenha(dados) {
+  try {
+    var id = parseInt(dados && dados.usuarioId, 10);
+    if (!id) {
+      return { success: false, error: 'Sessão inválida. Faça login novamente.' };
+    }
+    var senhaAtual = ((dados && dados.senhaAtual) || '').toString().trim();
+    var novaSenha = ((dados && dados.novaSenha) || '').toString().trim();
+    var confirmarSenha = ((dados && dados.confirmarSenha) || '').toString().trim();
+
+    if (!senhaAtual || !novaSenha || !confirmarSenha) {
+      return { success: false, error: 'Preencha a senha atual e a nova senha' };
+    }
+    if (novaSenha !== confirmarSenha) {
+      return { success: false, error: 'A confirmação de senha não coincide' };
+    }
+    var forca = validarForcaSenha(novaSenha);
+    if (!forca.ok) {
+      return { success: false, error: forca.error };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: false, error: 'Usuário não encontrado' };
+    }
+    var estrutura = obterEstruturaPlanilha(sheet);
+    var totalColunas = estrutura.ultimaColuna || 10;
+    var idIndex = obterIndiceColuna(estrutura, 'id', 0);
+    var ultimaLinha = sheet.getLastRow();
+    var faixa = sheet.getRange(2, 1, ultimaLinha - 1, totalColunas);
+    var valores = faixa.getValues();
+
+    for (var i = 0; i < valores.length; i++) {
+      if (parseInt(valores[i][idIndex], 10) === id) {
+        var senhaArmazenada = (obterValorLinha(valores[i], estrutura, 'senha', '') || '').toString().trim();
+        if (!validarSenha(senhaAtual, senhaArmazenada)) {
+          return { success: false, error: 'Senha atual incorreta' };
+        }
+        definirValorLinha(valores[i], estrutura, 'senha', criarHashSenha(novaSenha));
+        faixa.setValues(valores);
+        registrarLog('ALTERAR SENHA', 'Usuário id ' + id + ' alterou a própria senha');
+        limparCacheUsuarios();
+        return { success: true, message: 'Senha alterada com sucesso' };
+      }
+    }
+    return { success: false, error: 'Usuário não encontrado' };
+  } catch (error) {
+    registrarLog('ERRO', 'Erro ao alterar senha: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+function obterChaveCodigoResetSenha(login) {
+  return 'reset_codigo:' + normalizarTextoBasico(login);
+}
+
+function obterChaveTentativasResetSenha(login) {
+  return 'reset_tentativas:' + normalizarTextoBasico(login);
+}
+
+function obterChaveBloqueioResetSenha(login) {
+  return 'reset_bloqueio:' + normalizarTextoBasico(login);
+}
+
+function gerarCodigoResetSenha() {
+  var min = Math.pow(10, TAMANHO_CODIGO_RESET_SENHA - 1);
+  var max = Math.pow(10, TAMANHO_CODIGO_RESET_SENHA) - 1;
+  return String(Math.floor(min + Math.random() * (max - min + 1)));
+}
+
+function solicitarResetSenha(dados) {
+  var mensagemGenerica = 'Se o usuário existir e tiver e-mail de recuperação cadastrado, enviaremos um código.';
+  try {
+    var login = ((dados && (dados.usuario || dados.matricula || dados.login)) || '').toString().trim();
+    if (!login) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var cache = obterCacheLogin();
+    if (cache.get(obterChaveBloqueioResetSenha(login)) === '1') {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
+    var totalColunas = estrutura.ultimaColuna || 10;
+    var valores = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
+    var alvoNormalizado = normalizarTextoBasico(login);
+    var linhaEncontrada = null;
+
+    for (var i = 0; i < valores.length; i++) {
+      var linha = valores[i];
+      var identificadores = ['usuario', 'nome', 'matricula', 'email'].map(function(chave) {
+        return ((obterValorLinha(linha, estrutura, chave, '')) || '').toString().trim();
+      });
+      var encontrou = identificadores.some(function(valor) {
+        return normalizarTextoBasico(valor) === alvoNormalizado;
+      });
+      if (encontrou) {
+        linhaEncontrada = linha;
+        break;
+      }
+    }
+
+    if (!linhaEncontrada) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var status = ((obterValorLinha(linhaEncontrada, estrutura, 'status', '')) || '').toString();
+    var emailRecuperacao = ((obterValorLinhaFlexivel(linhaEncontrada, estrutura, CABECALHOS_EMAIL_RECUPERACAO, '')) || '').toString().trim();
+
+    if (normalizarTextoBasico(status) !== 'ativo' || !emailRecuperacao) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var chaveTentativas = obterChaveTentativasResetSenha(login);
+    var tentativasAtuais = parseInt(cache.get(chaveTentativas) || '0', 10) + 1;
+    cache.put(chaveTentativas, tentativasAtuais.toString(), BLOQUEIO_RESET_SENHA_MINUTOS * 60);
+    if (tentativasAtuais > MAX_TENTATIVAS_RESET_SENHA) {
+      cache.put(obterChaveBloqueioResetSenha(login), '1', BLOQUEIO_RESET_SENHA_MINUTOS * 60);
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var codigo = gerarCodigoResetSenha();
+    cache.put(obterChaveCodigoResetSenha(login), codigo, VALIDADE_CODIGO_RESET_SENHA_MINUTOS * 60);
+
+    MailApp.sendEmail({
+      to: emailRecuperacao,
+      subject: 'Código de recuperação de senha - Cosign',
+      body: 'Seu código de verificação é: ' + codigo + '\n\nEle expira em ' + VALIDADE_CODIGO_RESET_SENHA_MINUTOS + ' minutos.\n\nSe você não solicitou este código, ignore este e-mail.'
+    });
+
+    registrarLog('SOLICITAR RESET SENHA', 'Código enviado para usuário ' + login);
+    return { success: true, message: mensagemGenerica };
+  } catch (error) {
+    registrarLog('ERRO', 'Erro ao solicitar reset de senha: ' + error.toString());
+    return { success: true, message: mensagemGenerica };
+  }
+}
+
+function confirmarResetSenha(dados) {
+  try {
+    var login = ((dados && (dados.usuario || dados.matricula || dados.login)) || '').toString().trim();
+    var codigo = ((dados && dados.codigo) || '').toString().trim();
+    var novaSenha = ((dados && dados.novaSenha) || '').toString().trim();
+    var confirmarSenha = ((dados && dados.confirmarSenha) || '').toString().trim();
+
+    if (!login || !codigo || !novaSenha || !confirmarSenha) {
+      return { success: false, error: 'Preencha todos os campos' };
+    }
+    if (novaSenha !== confirmarSenha) {
+      return { success: false, error: 'A confirmação de senha não coincide' };
+    }
+    var forca = validarForcaSenha(novaSenha);
+    if (!forca.ok) {
+      return { success: false, error: forca.error };
+    }
+
+    var cache = obterCacheLogin();
+    var codigoArmazenado = cache.get(obterChaveCodigoResetSenha(login));
+    if (!codigoArmazenado || codigoArmazenado !== codigo) {
+      return { success: false, error: 'Código inválido ou expirado' };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: false, error: 'Usuário não encontrado' };
+    }
+    var estrutura = obterEstruturaPlanilha(sheet);
+    var totalColunas = estrutura.ultimaColuna || 10;
+    var ultimaLinha = sheet.getLastRow();
+    var faixa = sheet.getRange(2, 1, ultimaLinha - 1, totalColunas);
+    var valores = faixa.getValues();
+    var alvoNormalizado = normalizarTextoBasico(login);
+    var encontrado = false;
+
+    for (var i = 0; i < valores.length; i++) {
+      var linha = valores[i];
+      var identificadores = ['usuario', 'nome', 'matricula', 'email'].map(function(chave) {
+        return ((obterValorLinha(linha, estrutura, chave, '')) || '').toString().trim();
+      });
+      var encontrou = identificadores.some(function(valor) {
+        return normalizarTextoBasico(valor) === alvoNormalizado;
+      });
+      if (encontrou) {
+        definirValorLinha(linha, estrutura, 'senha', criarHashSenha(novaSenha));
+        encontrado = true;
+        break;
+      }
+    }
+
+    if (!encontrado) {
+      return { success: false, error: 'Código inválido ou expirado' };
+    }
+
+    faixa.setValues(valores);
+    cache.remove(obterChaveCodigoResetSenha(login));
+    cache.remove(obterChaveTentativasResetSenha(login));
+    limparTentativasLogin(login);
+    limparCacheUsuarios();
+    registrarLog('CONFIRMAR RESET SENHA', 'Senha redefinida via código para usuário ' + login);
+
+    return { success: true, message: 'Senha redefinida com sucesso' };
+  } catch (error) {
+    registrarLog('ERRO', 'Erro ao confirmar reset de senha: ' + error.toString());
     return { success: false, error: error.toString() };
   }
 }
@@ -6748,6 +7023,27 @@ function garantirColunaProntuario(sheet, estrutura) {
   var ultimaColuna = estruturaAtual.ultimaColuna || sheet.getLastColumn();
   sheet.insertColumnAfter(ultimaColuna);
   sheet.getRange(1, ultimaColuna + 1).setValue('Prontuário');
+
+  return obterEstruturaPlanilha(sheet);
+}
+
+var CABECALHOS_EMAIL_RECUPERACAO = ['email recuperacao', 'email recuperação', 'e-mail recuperacao', 'e-mail recuperação'];
+
+function garantirColunaEmailRecuperacao(sheet, estrutura) {
+  if (!sheet) {
+    return estrutura;
+  }
+
+  var estruturaAtual = estrutura || obterEstruturaPlanilha(sheet);
+  var indiceExistente = obterIndiceColuna(estruturaAtual, CABECALHOS_EMAIL_RECUPERACAO, null);
+
+  if (indiceExistente !== null && indiceExistente !== undefined) {
+    return estruturaAtual;
+  }
+
+  var ultimaColuna = estruturaAtual.ultimaColuna || sheet.getLastColumn();
+  sheet.insertColumnAfter(ultimaColuna);
+  sheet.getRange(1, ultimaColuna + 1).setValue('Email Recuperação');
 
   return obterEstruturaPlanilha(sheet);
 }

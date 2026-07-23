@@ -2139,6 +2139,22 @@
             flex-direction: column;
             gap: 8px;
         }
+        .avatar-password-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--modal-divider);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .avatar-password-section .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .avatar-password-section .form-actions {
+            margin-top: 4px;
+        }
         .avatar-custom label {
             font-size: 0.8rem;
             font-weight: 600;
@@ -2284,7 +2300,7 @@
             color: var(--input-text);
             transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
-        .login-input-wrap:has(#login-senha) input {
+        .login-input-wrap:has(.login-toggle-senha) input {
             padding-right: 44px;
         }
         .login-form input:focus {
@@ -2401,6 +2417,27 @@
         .login-help {
             font-size: 0.85rem;
             color: var(--login-help-text);
+        }
+        .login-link-button {
+            font-size: 0.85rem;
+            color: var(--primary-color);
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .login-link-button:hover {
+            color: var(--primary-dark);
+        }
+        .login-capslock-aviso {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            color: var(--danger-color);
+            margin-top: 4px;
         }
         .checkbox-grid {
             display: grid;

@@ -2495,6 +2495,9 @@
                 return;
             }
             loginInicializado = true;
+            inicializarTogglesSenha();
+            inicializarAvisoCapsLock();
+            inicializarResetSenha();
             const sessaoRestaurada = restaurarSessaoUsuario();
             if (sessaoRestaurada && !estado.autenticado) {
                 const usuarioRestaurado = {
@@ -2519,6 +2522,9 @@
             }
             if (!elementos.loginForm) {
                 return;
+            }
+            if (elementos.loginUsuario && elementos.loginContainer && !elementos.loginContainer.classList.contains('hidden')) {
+                elementos.loginUsuario.focus();
             }
             elementos.loginForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
@@ -2557,6 +2563,85 @@
                 } catch (error) {
                     console.error('Erro ao autenticar usuário:', error);
                     atualizarFeedbackLogin('error', 'Não foi possível realizar o login. Tente novamente.');
+                } finally {
+                    finalizarLoading();
+                }
+            });
+        }
+        function abrirModalResetSenha() {
+            const modal = document.getElementById('reset-senha-modal');
+            if (!modal) return;
+            document.getElementById('reset-senha-form-etapa1')?.reset();
+            document.getElementById('reset-senha-form-etapa2')?.reset();
+            document.getElementById('reset-senha-form-etapa1')?.classList.remove('hidden');
+            document.getElementById('reset-senha-form-etapa2')?.classList.add('hidden');
+            if (modal.style.display !== 'flex') {
+                travaRolagem.aplicar();
+            }
+            modal.style.display = 'flex';
+            document.getElementById('reset-senha-login')?.focus();
+        }
+        function fecharModalResetSenha() {
+            const modal = document.getElementById('reset-senha-modal');
+            if (!modal) return;
+            if (modal.style.display === 'flex') {
+                travaRolagem.remover();
+            }
+            modal.style.display = 'none';
+        }
+        function inicializarResetSenha() {
+            const botaoAbrir = document.getElementById('login-esqueci-senha');
+            const botaoFechar = document.getElementById('reset-senha-modal-close');
+            const form1 = document.getElementById('reset-senha-form-etapa1');
+            const form2 = document.getElementById('reset-senha-form-etapa2');
+
+            botaoAbrir?.addEventListener('click', abrirModalResetSenha);
+            botaoFechar?.addEventListener('click', fecharModalResetSenha);
+
+            form1?.addEventListener('submit', async (evento) => {
+                evento.preventDefault();
+                const login = document.getElementById('reset-senha-login')?.value.trim();
+                if (!login) return;
+                const botao = document.getElementById('reset-senha-btn-enviar');
+                const finalizarLoading = iniciarLoadingBotao(botao);
+                try {
+                    const resultado = await callGoogleScript('solicitarResetSenha', { usuario: login, matricula: login }, { tentativas: 1 });
+                    mostrarSucesso(resultado.message || 'Se o usuário existir, enviaremos um código.');
+                    form1.classList.add('hidden');
+                    form2.classList.remove('hidden');
+                    form2.dataset.login = login;
+                    document.getElementById('reset-senha-codigo')?.focus();
+                } catch (erro) {
+                    console.error('Erro ao solicitar reset de senha:', erro);
+                    mostrarErro('Não foi possível processar a solicitação. Tente novamente.');
+                } finally {
+                    finalizarLoading();
+                }
+            });
+
+            form2?.addEventListener('submit', async (evento) => {
+                evento.preventDefault();
+                const login = form2.dataset.login;
+                const codigo = document.getElementById('reset-senha-codigo')?.value.trim();
+                const novaSenha = document.getElementById('reset-senha-nova')?.value.trim();
+                const confirmarSenha = document.getElementById('reset-senha-confirmar')?.value.trim();
+                if (novaSenha !== confirmarSenha) {
+                    mostrarErro('A confirmação de senha não coincide.');
+                    return;
+                }
+                const botao = document.getElementById('reset-senha-btn-confirmar');
+                const finalizarLoading = iniciarLoadingBotao(botao);
+                try {
+                    const resultado = await callGoogleScript('confirmarResetSenha', { usuario: login, matricula: login, codigo, novaSenha, confirmarSenha }, { tentativas: 1 });
+                    if (resultado.success) {
+                        mostrarSucesso('Senha redefinida com sucesso. Faça login com a nova senha.');
+                        fecharModalResetSenha();
+                    } else {
+                        notificarErroPadrao(resultado);
+                    }
+                } catch (erro) {
+                    console.error('Erro ao confirmar reset de senha:', erro);
+                    mostrarErro('Não foi possível redefinir a senha. Tente novamente.');
                 } finally {
                     finalizarLoading();
                 }
@@ -3439,6 +3524,34 @@
             const mensagem = resultado.error || mensagemPadrao;
             mostrarErro(mensagem);
         }
+        function inicializarTogglesSenha() {
+            document.querySelectorAll('.login-toggle-senha').forEach(botao => {
+                if (botao.dataset.toggleSenhaLigado === '1') return;
+                botao.dataset.toggleSenhaLigado = '1';
+                botao.addEventListener('click', () => {
+                    const input = botao.closest('.login-input-wrap')?.querySelector('input');
+                    if (!input) return;
+                    const mostrando = input.type === 'text';
+                    input.type = mostrando ? 'password' : 'text';
+                    botao.setAttribute('aria-pressed', String(!mostrando));
+                    botao.setAttribute('aria-label', mostrando ? 'Mostrar senha' : 'Ocultar senha');
+                    const icone = botao.querySelector('i');
+                    if (icone) icone.className = mostrando ? 'fas fa-eye' : 'fas fa-eye-slash';
+                });
+            });
+        }
+        function inicializarAvisoCapsLock() {
+            const campo = elementos.loginSenha;
+            const aviso = document.getElementById('login-capslock-aviso');
+            if (!campo || !aviso) return;
+            const verificar = evento => {
+                const ativo = typeof evento.getModifierState === 'function' && evento.getModifierState('CapsLock');
+                aviso.classList.toggle('hidden', !ativo);
+            };
+            campo.addEventListener('keyup', verificar);
+            campo.addEventListener('keydown', verificar);
+            campo.addEventListener('blur', () => aviso.classList.add('hidden'));
+        }
         function calcularHoraPrevistaSaida() {
             const agora = new Date();
             agora.setHours(agora.getHours() + 1);
@@ -3485,6 +3598,33 @@
             }
             eventosInicializados = true;
             configurarEntradasMaiusculas();
+            document.getElementById('alterar-senha-form')?.addEventListener('submit', async (evento) => {
+                evento.preventDefault();
+                const senhaAtual = document.getElementById('alterar-senha-atual')?.value.trim();
+                const novaSenha = document.getElementById('alterar-senha-nova')?.value.trim();
+                const confirmarSenha = document.getElementById('alterar-senha-confirmar')?.value.trim();
+                if (novaSenha !== confirmarSenha) {
+                    mostrarErro('A confirmação de senha não coincide.');
+                    return;
+                }
+                const botao = document.getElementById('alterar-senha-btn-salvar');
+                const finalizarLoading = iniciarLoadingBotao(botao);
+                try {
+                    const resultado = await callGoogleScript('alterarMinhaSenha', { senhaAtual, novaSenha, confirmarSenha }, { tentativas: 1 });
+                    if (resultado.success) {
+                        mostrarSucesso('Senha alterada com sucesso.');
+                        evento.target.reset();
+                        fecharModalAvatar();
+                    } else {
+                        notificarErroPadrao(resultado);
+                    }
+                } catch (erro) {
+                    console.error('Erro ao alterar senha:', erro);
+                    mostrarErro('Não foi possível alterar a senha. Tente novamente.');
+                } finally {
+                    finalizarLoading();
+                }
+            });
             mobileNavQuery.addEventListener('change', sincronizarSidebarComViewport);
             sincronizarSidebarComViewport(mobileNavQuery);
             if (elementos.sidebarToggle) {
@@ -6295,8 +6435,18 @@
             }
             document.getElementById('usuario-nome').value = usuario.nome || '';
             document.getElementById('usuario-email').value = usuario.email || '';
+            document.getElementById('usuario-email-recuperacao').value = usuario.emailRecuperacao || '';
             if (elementos.usuarioSenha) {
                 elementos.usuarioSenha.value = '';
+                elementos.usuarioSenha.required = false;
+            }
+            const usuarioSenhaConfirmarEditar = document.getElementById('usuario-senha-confirmar');
+            if (usuarioSenhaConfirmarEditar) {
+                usuarioSenhaConfirmarEditar.value = '';
+            }
+            const usuarioSenhaHintEditar = document.getElementById('usuario-senha-hint');
+            if (usuarioSenhaHintEditar) {
+                usuarioSenhaHintEditar.textContent = 'Deixe em branco para manter a senha atual.';
             }
             if (elementos.usuarioStatus) {
                 elementos.usuarioStatus.value = usuario.status || 'ativo';
@@ -8230,6 +8380,13 @@
             if (elementos.usuarioModalTitle) {
                 elementos.usuarioModalTitle.textContent = 'Cadastrar Usuário';
             }
+            if (elementos.usuarioSenha) {
+                elementos.usuarioSenha.required = true;
+            }
+            const usuarioSenhaHintNovo = document.getElementById('usuario-senha-hint');
+            if (usuarioSenhaHintNovo) {
+                usuarioSenhaHintNovo.textContent = '';
+            }
             if (elementos.usuarioStatus) {
                 elementos.usuarioStatus.value = 'ativo';
             }
@@ -8357,11 +8514,14 @@
             const botaoSalvar = document.getElementById('usuario-btn-salvar');
             const finalizarLoading = iniciarLoadingBotao(botaoSalvar);
             const usuarioId = elementos.usuarioForm.dataset.id;
+            const senha = elementos.usuarioSenha ? elementos.usuarioSenha.value.trim() : '';
+            const senhaConfirmar = document.getElementById('usuario-senha-confirmar')?.value.trim() || '';
             const dados = {
                 id: usuarioId,
                 nome: document.getElementById('usuario-nome').value.trim(),
                 email: document.getElementById('usuario-email').value.trim(),
-                senha: elementos.usuarioSenha ? elementos.usuarioSenha.value.trim() : '',
+                senha,
+                emailRecuperacao: document.getElementById('usuario-email-recuperacao')?.value.trim() || '',
                 perfil: document.getElementById('usuario-perfil').value,
                 status: elementos.usuarioStatus ? elementos.usuarioStatus.value : 'ativo',
                 acessoVisitantes: document.getElementById('acesso-visitantes').checked,
@@ -8369,6 +8529,14 @@
                 unidades: obterUnidadesSelecionadasFormulario()
             };
             try {
+                if (!usuarioId && !senha) {
+                    mostrarErro('Informe uma senha para o novo usuário.');
+                    return;
+                }
+                if (senha && senha !== senhaConfirmar) {
+                    mostrarErro('A confirmação de senha não coincide.');
+                    return;
+                }
                 if (!dados.unidades.length && dados.perfil !== 'admin') {
                     mostrarErro('Selecione ao menos uma unidade para o usuário.');
                     return;
