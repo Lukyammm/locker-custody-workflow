@@ -8149,8 +8149,8 @@
                     const horaPrevista = tipoNormalizado === 'visitante' ? popup.querySelector('#editar-hora-prevista').value : '';
                     const observacoes = tipoNormalizado === 'acompanhante' ? (popup.querySelector('#editar-observacoes')?.value || '').trim() : '';
 
-                    if (!nomeVisitante || !nomePaciente || !leito) {
-                        Swal.showValidationMessage('Preencha nome do visitante/acompanhante, paciente e leito.');
+                    if (!nomeVisitante || !nomePaciente || !prontuario || !leito) {
+                        Swal.showValidationMessage('Preencha nome do visitante/acompanhante, paciente, prontuário e leito.');
                         return false;
                     }
                     if (!Number.isFinite(volumesValor) || volumesValor < 0) {
@@ -8455,6 +8455,7 @@
                         id: idPlanilha,
                         nomeVisitante: dados.nomeVisitante,
                         nomePaciente: dados.nomePaciente,
+                        prontuario: dados.prontuario,
                         leito: dados.leito,
                         volumes: volumesInformados,
                         whatsapp: dados.whatsapp
@@ -8463,6 +8464,7 @@
                         id: idPlanilha,
                         nomeVisitante: dados.nomeVisitante,
                         nomePaciente: dados.nomePaciente,
+                        prontuario: dados.prontuario,
                         leito: dados.leito,
                         whatsapp: dados.whatsapp
                     };
