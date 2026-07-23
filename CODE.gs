@@ -1003,8 +1003,8 @@ function inicializarPlanilha() {
         cabecalhos: ['Data/Hora', 'Usuário', 'Ação', 'Detalhes', 'IP'] 
       },
       { 
-        nome: 'Termos de Responsabilidade', 
-        cabecalhos: ['ID', 'ArmarioID', 'NumeroArmario', 'Paciente', 'Prontuario', 'Nascimento', 'Setor', 'Leito', 'Consciente', 'Acompanhante', 'Telefone', 'Documento', 'Parentesco', 'Orientacoes', 'Volumes', 'DescricaoVolumes', 'AplicadoEm', 'PDF_URL', 'AssinaturaBase64'] 
+        nome: 'Termos de Responsabilidade',
+        cabecalhos: ['ID', 'ArmarioID', 'NumeroArmario', 'Paciente', 'Prontuario', 'Nascimento', 'Setor', 'Leito', 'Consciente', 'Acompanhante', 'Telefone', 'Documento', 'Parentesco', 'Orientacoes', 'Volumes', 'DescricaoVolumes', 'AplicadoEm', 'PDF_URL', 'AssinaturaBase64', 'Status']
       },
       {
         nome: 'Movimentações',
@@ -1040,9 +1040,117 @@ function inicializarPlanilha() {
     limparCacheMovimentacoes();
 
     return { success: true, message: 'Planilha inicializada com sucesso' };
-    
+
   } catch (error) {
     return { success: false, error: error.toString() };
+  }
+}
+
+// Menu na própria planilha para ações de manutenção — assim o operador não
+// precisa abrir o editor de Apps Script. Aparece ao abrir a planilha.
+function onOpen() {
+  try {
+    SpreadsheetApp.getUi()
+      .createMenu('🔧 Custódia')
+      .addItem('Reparar estrutura da planilha', 'repararEstruturaPlanilhaUI')
+      .addSeparator()
+      .addItem('Inicializar planilha (novo)', 'inicializarPlanilhaUI')
+      .addToUi();
+  } catch (erroMenu) {
+    // getUi() só existe em contexto vinculado à planilha; ignorar em outros.
+  }
+}
+
+function repararEstruturaPlanilhaUI() {
+  var resultado = repararEstruturaPlanilha();
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var corpo = (resultado.detalhes && resultado.detalhes.length)
+      ? resultado.detalhes.join('\n')
+      : (resultado.success ? 'Nenhum ajuste necessário.' : (resultado.error || 'Erro desconhecido'));
+    ui.alert(resultado.success ? 'Estrutura verificada' : 'Falha ao reparar', corpo, ui.ButtonSet.OK);
+  } catch (erroUi) {
+    // Sem UI (execução manual pelo editor): resultado é retornado assim mesmo.
+  }
+  return resultado;
+}
+
+function inicializarPlanilhaUI() {
+  var resultado = inicializarPlanilha();
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.alert(resultado.success ? 'Planilha inicializada' : 'Falha',
+      resultado.message || resultado.error || '', ui.ButtonSet.OK);
+  } catch (erroUi) {}
+  return resultado;
+}
+
+// Reparo NÃO destrutivo da estrutura: garante que TODAS as colunas esperadas
+// pelo código existam nas abas já criadas. Diferente de inicializarPlanilha (que
+// só cria abas ausentes), esta função conserta abas antigas às quais faltam
+// colunas — a causa raiz de dados que "sumiam" (ex.: Prontuário/Observações
+// ausentes na aba Acompanhantes). Só ACRESCENTA colunas/cabeçalhos; nunca apaga
+// nem reordena dados existentes. Pode ser executada quantas vezes quiser.
+function repararEstruturaPlanilha() {
+  var relatorio = [];
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    var comSheet = function(nome, fn) {
+      var sheet = ss.getSheetByName(nome);
+      if (!sheet) {
+        relatorio.push('• ' + nome + ': aba ausente — rode "Inicializar planilha".');
+        return;
+      }
+      try {
+        fn(sheet);
+        relatorio.push('• ' + nome + ': OK');
+      } catch (erroAba) {
+        relatorio.push('• ' + nome + ': ERRO — ' + erroAba);
+      }
+    };
+
+    comSheet('Visitantes', function(sheet) {
+      var est = obterEstruturaPlanilha(sheet);
+      est = garantirColunaVisitaEstendida(sheet, est);
+      est = garantirColunaProntuario(sheet, est);
+      garantirColunasFotoContingencia(sheet, est);
+    });
+
+    comSheet('Acompanhantes', function(sheet) {
+      var est = obterEstruturaPlanilha(sheet);
+      est = garantirColunaProntuario(sheet, est);
+      est = garantirColunaObservacoesAcompanhantes(sheet, est);
+      garantirColunasFotoContingencia(sheet, est);
+    });
+
+    comSheet('Histórico Visitantes', function(sheet) { garantirEstruturaHistorico(sheet); });
+    comSheet('Histórico Acompanhantes', function(sheet) { garantirEstruturaHistorico(sheet); });
+    comSheet('Movimentações', function(sheet) { garantirEstruturaMovimentacoes(sheet); });
+    comSheet('Usuários', function(sheet) { garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet)); });
+    comSheet('Termos de Responsabilidade', function(sheet) { garantirColunaStatusTermo(sheet); });
+
+    // "Registro de Imagens" é criada sob demanda; só normaliza se já existir.
+    var registro = ss.getSheetByName('Registro de Imagens');
+    if (registro) {
+      garantirEstruturaRegistroImagens(registro);
+      relatorio.push('• Registro de Imagens: OK');
+    }
+
+    try { limparCacheArmarios(); } catch (e) {}
+    try { limparCacheHistorico(); } catch (e) {}
+    try { limparCacheUsuarios(); } catch (e) {}
+    try { limparCacheMovimentacoes(); } catch (e) {}
+
+    try { registrarLog('SISTEMA', 'Estrutura da planilha reparada'); } catch (e) {}
+
+    return {
+      success: true,
+      message: 'Estrutura verificada. Colunas ausentes foram criadas (nenhum dado apagado).',
+      detalhes: relatorio
+    };
+  } catch (error) {
+    return { success: false, error: error.toString(), detalhes: relatorio };
   }
 }
 
@@ -3409,6 +3517,13 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
     definirCampoComFallback('status', 'livre', statusIndex);
     definirValorLinha(novaLinha, estrutura, nomeColuna, '');
     definirNomePacienteLinha(novaLinha, estrutura, '');
+    // Limpa também o prontuário do ocupante anterior. Antes, todos os campos de
+    // identificação do paciente eram zerados na liberação, exceto o prontuário —
+    // que permanecia na linha e podia reaparecer para o próximo ocupante (dado
+    // obsoleto/vazamento de informação) quando a reserva seguinte não o
+    // sobrescrevia (ex.: paciente sem prontuário informado). A coluna já foi
+    // garantida por garantirColunaProntuario acima.
+    definirValorLinha(novaLinha, estrutura, 'prontuario', '');
     definirValorLinha(novaLinha, estrutura, 'leito', '');
     definirValorLinha(novaLinha, estrutura, 'volumes', '');
     definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -5186,6 +5301,13 @@ function salvarTermoCompleto(dadosTermo) {
       }
     }
 
+    // Guarda se JÁ existia um termo não finalizado para este armário ANTES de
+    // decidirmos onde gravar. Quando existe, estamos apenas CONTINUANDO/atualizando
+    // a reserva do próprio ocupante (fluxo "continuar termo") — o armário estar
+    // "em-uso" nesse caso é esperado e não deve bloquear o salvamento. Só um termo
+    // realmente novo sobre um armário ocupado indica conflito/estado desatualizado.
+    var termoJaExistia = linhaExistente !== -1;
+
     if (linhaExistente === -1) {
       var lastRow = sheet.getLastRow();
       termoId = lastRow > 1 ? Math.max.apply(null, sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat()) + 1 : 1;
@@ -5275,6 +5397,22 @@ function salvarTermoCompleto(dadosTermo) {
     }
 
     dadosTermo.numeroArmario = numeroArmarioOficial;
+
+    // Verificação de disponibilidade ANTES de gravar qualquer coisa (upload de
+    // fotos, linha do termo ou atualização do armário). Antes, o termo era
+    // escrito na planilha e só depois checava-se o status — se o armário
+    // estivesse ocupado, a reserva era recusada mas restava um TERMO ÓRFÃO não
+    // finalizado, que reaparecia como "Termo pendente" e atrapalhava reservas
+    // futuras. Só bloqueamos quando é um termo NOVO (não uma continuação do
+    // próprio ocupante) sobre um armário já ocupado.
+    if (!termoJaExistia && linhaAcompanhante > -1 && estruturaAcompanhantes && dadosAcompanhantes[linhaAcompanhante]) {
+      var statusOcupacaoAtual = normalizarTextoBasico(
+        obterValorLinha(dadosAcompanhantes[linhaAcompanhante], estruturaAcompanhantes, 'status', '')
+      );
+      if (statusOcupacaoAtual && statusOcupacaoAtual !== 'livre' && statusOcupacaoAtual !== 'contingencia') {
+        return { success: false, error: 'Armário já está em uso. Atualize a lista e tente novamente.' };
+      }
+    }
 
     volumes = volumes.map(function(item, indice) {
       var volumeAtual = {
@@ -5379,14 +5517,20 @@ function salvarTermoCompleto(dadosTermo) {
         dadosCadastroAcompanhante.prontuario = dadosTermo.prontuario || '';
       }
 
-      var statusAtual = normalizarTextoBasico(obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', ''));
-      if (statusAtual && statusAtual !== 'livre' && statusAtual !== 'contingencia') {
-        throw new Error('Armário já está em uso. Atualize a lista e tente novamente.');
-      }
+      // A verificação de "armário já está em uso" foi antecipada para antes de
+      // qualquer gravação (logo após resolver numeroArmarioOficial), evitando
+      // termos órfãos e permitindo a continuação de um termo já iniciado.
 
       var dataHoraAtualCadastro = obterDataHoraAtualFormatada();
-      var horaInicioCadastro = dataHoraAtualCadastro.horaCurta;
-      var dataRegistroCadastro = dataHoraAtualCadastro.dataHoraIso;
+      // Preserva o INÍCIO original da reserva quando esta é uma re-gravação
+      // (continuação de um termo já iniciado OU retry após uma resposta perdida
+      // — callGoogleScript reenvia ações de escrita). Só define hora início/data
+      // registro na PRIMEIRA aplicação; do contrário, o horário de início seria
+      // resetado para "agora" a cada re-envio.
+      var horaInicioExistente = obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'hora inicio', '');
+      var dataRegistroExistente = obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'data registro', '');
+      var horaInicioCadastro = (termoJaExistia && horaInicioExistente) ? horaInicioExistente : dataHoraAtualCadastro.horaCurta;
+      var dataRegistroCadastro = (termoJaExistia && dataRegistroExistente) ? dataRegistroExistente : dataHoraAtualCadastro.dataHoraIso;
       var unidadeAtual = obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'unidade', '');
       var whatsappCadastro = dadosCadastroAcompanhante.whatsapp ? dadosCadastroAcompanhante.whatsapp.toString().trim() : '';
       var nomeColunaCadastro = CABECALHOS_NOME_ACOMPANHANTE;
@@ -5401,8 +5545,12 @@ function salvarTermoCompleto(dadosTermo) {
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'data registro', dataRegistroCadastro);
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, CABECALHOS_WHATSAPP, whatsappCadastro);
 
-      // Registrar histórico de uso
-      var historicoSheet = ss.getSheetByName('Histórico Acompanhantes');
+      // Registrar histórico de uso — APENAS na primeira aplicação do termo.
+      // Sem esta guarda, uma continuação de termo ou um retry (após resposta
+      // perdida) acrescentaria uma NOVA linha "EM USO" para a mesma reserva,
+      // duplicando o histórico. termoJaExistia indica que já havia um termo não
+      // finalizado para este armário — ou seja, a reserva já foi contabilizada.
+      var historicoSheet = termoJaExistia ? null : ss.getSheetByName('Histórico Acompanhantes');
       if (historicoSheet) {
         var historicoLastRow = historicoSheet.getLastRow();
         var historicoId = historicoLastRow > 1
@@ -6520,6 +6668,11 @@ function garantirEstruturaMovimentacoes(sheet) {
   var colunaAssinaturaMime = 14;
   var colunaFotoUrl = 15;
   var colunaFotoId = 16;
+  // Token de idempotência gerado pelo cliente: permite deduplicar reenvios da
+  // MESMA movimentação (callGoogleScript reenvia ações de escrita e ainda tem
+  // fallback nativo — um timeout após a gravação levaria a registros
+  // duplicados). Coluna acrescentada ao fim; não desloca as colunas 1-16.
+  var colunaClienteId = 17;
 
   if (!sheet) {
     return {
@@ -6528,11 +6681,12 @@ function garantirEstruturaMovimentacoes(sheet) {
       colunaVolume: colunaVolume,
       colunaFotoUrl: colunaFotoUrl,
       colunaFotoId: colunaFotoId,
-      ultimaColuna: colunaFotoId
+      colunaClienteId: colunaClienteId,
+      ultimaColuna: colunaClienteId
     };
   }
 
-  var minimoColunas = Math.max(colunaItens, colunaStatus, colunaVolume, colunaAssinaturaMime, colunaFotoId);
+  var minimoColunas = Math.max(colunaItens, colunaStatus, colunaVolume, colunaAssinaturaMime, colunaFotoId, colunaClienteId);
   var totalColunas = sheet.getLastColumn();
   if (totalColunas < minimoColunas) {
     sheet.insertColumnsAfter(totalColunas, minimoColunas - totalColunas);
@@ -6561,6 +6715,9 @@ function garantirEstruturaMovimentacoes(sheet) {
   if (!cabecalhos[colunaFotoId - 1]) {
     sheet.getRange(1, colunaFotoId).setValue('Foto ID');
   }
+  if (!cabecalhos[colunaClienteId - 1]) {
+    sheet.getRange(1, colunaClienteId).setValue('Cliente ID');
+  }
 
   return {
     colunaStatus: colunaStatus,
@@ -6570,6 +6727,7 @@ function garantirEstruturaMovimentacoes(sheet) {
     colunaAssinaturaMime: colunaAssinaturaMime,
     colunaFotoUrl: colunaFotoUrl,
     colunaFotoId: colunaFotoId,
+    colunaClienteId: colunaClienteId,
     ultimaColuna: Math.max(totalColunas, minimoColunas)
   };
 }
@@ -7027,6 +7185,30 @@ function garantirColunaProntuario(sheet, estrutura) {
   return obterEstruturaPlanilha(sheet);
 }
 
+// Garante o cabeçalho "Status" na 20ª coluna da aba "Termos de Responsabilidade".
+// salvarTermoCompleto grava o status do termo por ÍNDICE FIXO (coluna 20), mas o
+// schema antigo criava a aba só até "AssinaturaBase64" (19 colunas) — deixando a
+// coluna de status sem cabeçalho. Isto normaliza planilhas já existentes.
+function garantirColunaStatusTermo(sheet) {
+  if (!sheet) {
+    return;
+  }
+  var minimo = 20;
+  var totalColunas = sheet.getLastColumn();
+  if (totalColunas < minimo) {
+    sheet.insertColumnsAfter(totalColunas, minimo - totalColunas);
+    totalColunas = sheet.getLastColumn();
+  }
+  var cabecalhos = sheet.getRange(1, 1, 1, totalColunas).getValues()[0];
+  if (!cabecalhos[18]) {
+    sheet.getRange(1, 19).setValue('AssinaturaBase64');
+  }
+  if (!cabecalhos[19]) {
+    sheet.getRange(1, 20).setValue('Status');
+  }
+  return totalColunas;
+}
+
 var CABECALHOS_EMAIL_RECUPERACAO = ['email recuperacao', 'email recuperação', 'e-mail recuperacao', 'e-mail recuperação'];
 
 function garantirColunaEmailRecuperacao(sheet, estrutura) {
@@ -7344,14 +7526,41 @@ function salvarMovimentacao(dados) {
   var colunaAssinaturaMime = estruturaMov.colunaAssinaturaMime;
   var colunaFotoUrl = estruturaMov.colunaFotoUrl;
   var colunaFotoId = estruturaMov.colunaFotoId;
+  var colunaClienteId = estruturaMov.colunaClienteId;
   var larguraMovimentacao = Math.max(
     colunaItens,
     estruturaMov.ultimaColuna,
     sheet.getLastColumn(),
     colunaVolume,
     colunaAssinaturaMime,
-    colunaFotoId
+    colunaFotoId,
+    colunaClienteId
   );
+
+    // Idempotência: se o cliente enviou um token e já existe uma movimentação
+    // com o mesmo token, este é um REENVIO da mesma operação (retry/fallback
+    // após resposta perdida). Retorna sucesso sem gravar de novo — evitando
+    // registros de custódia duplicados. Verificado ANTES de qualquer upload
+    // de foto ou escrita.
+    var clienteMovimentacaoId = (dados.clienteMovimentacaoId || '').toString().trim();
+    if (clienteMovimentacaoId && colunaClienteId) {
+      var totalLinhasToken = sheet.getLastRow() - 1;
+      if (totalLinhasToken > 0) {
+        var tokensExistentes = sheet.getRange(2, colunaClienteId, totalLinhasToken, 1).getValues();
+        var idsExistentes = sheet.getRange(2, 1, totalLinhasToken, 1).getValues();
+        for (var t = 0; t < tokensExistentes.length; t++) {
+          var tokenLinha = (tokensExistentes[t][0] || '').toString().trim();
+          if (tokenLinha && tokenLinha === clienteMovimentacaoId) {
+            return {
+              success: true,
+              duplicado: true,
+              message: 'Movimentação já registrada',
+              id: idsExistentes[t][0]
+            };
+          }
+        }
+      }
+    }
 
     // Buscar número do armário
     var tipoArmarioNormalizado = normalizarTextoBasico(dados.tipoArmario);
@@ -7530,6 +7739,9 @@ function salvarMovimentacao(dados) {
   }
   if (colunaFotoId) {
     novaLinha[colunaFotoId - 1] = fotoIdValor;
+  }
+  if (colunaClienteId) {
+    novaLinha[colunaClienteId - 1] = clienteMovimentacaoId;
   }
 
     sheet.getRange(lastRow + 1, 1, 1, novaLinha.length).setValues([novaLinha]);
