@@ -6668,6 +6668,11 @@ function garantirEstruturaMovimentacoes(sheet) {
   var colunaAssinaturaMime = 14;
   var colunaFotoUrl = 15;
   var colunaFotoId = 16;
+  // Token de idempotência gerado pelo cliente: permite deduplicar reenvios da
+  // MESMA movimentação (callGoogleScript reenvia ações de escrita e ainda tem
+  // fallback nativo — um timeout após a gravação levaria a registros
+  // duplicados). Coluna acrescentada ao fim; não desloca as colunas 1-16.
+  var colunaClienteId = 17;
 
   if (!sheet) {
     return {
@@ -6676,11 +6681,12 @@ function garantirEstruturaMovimentacoes(sheet) {
       colunaVolume: colunaVolume,
       colunaFotoUrl: colunaFotoUrl,
       colunaFotoId: colunaFotoId,
-      ultimaColuna: colunaFotoId
+      colunaClienteId: colunaClienteId,
+      ultimaColuna: colunaClienteId
     };
   }
 
-  var minimoColunas = Math.max(colunaItens, colunaStatus, colunaVolume, colunaAssinaturaMime, colunaFotoId);
+  var minimoColunas = Math.max(colunaItens, colunaStatus, colunaVolume, colunaAssinaturaMime, colunaFotoId, colunaClienteId);
   var totalColunas = sheet.getLastColumn();
   if (totalColunas < minimoColunas) {
     sheet.insertColumnsAfter(totalColunas, minimoColunas - totalColunas);
@@ -6709,6 +6715,9 @@ function garantirEstruturaMovimentacoes(sheet) {
   if (!cabecalhos[colunaFotoId - 1]) {
     sheet.getRange(1, colunaFotoId).setValue('Foto ID');
   }
+  if (!cabecalhos[colunaClienteId - 1]) {
+    sheet.getRange(1, colunaClienteId).setValue('Cliente ID');
+  }
 
   return {
     colunaStatus: colunaStatus,
@@ -6718,6 +6727,7 @@ function garantirEstruturaMovimentacoes(sheet) {
     colunaAssinaturaMime: colunaAssinaturaMime,
     colunaFotoUrl: colunaFotoUrl,
     colunaFotoId: colunaFotoId,
+    colunaClienteId: colunaClienteId,
     ultimaColuna: Math.max(totalColunas, minimoColunas)
   };
 }
@@ -7516,14 +7526,41 @@ function salvarMovimentacao(dados) {
   var colunaAssinaturaMime = estruturaMov.colunaAssinaturaMime;
   var colunaFotoUrl = estruturaMov.colunaFotoUrl;
   var colunaFotoId = estruturaMov.colunaFotoId;
+  var colunaClienteId = estruturaMov.colunaClienteId;
   var larguraMovimentacao = Math.max(
     colunaItens,
     estruturaMov.ultimaColuna,
     sheet.getLastColumn(),
     colunaVolume,
     colunaAssinaturaMime,
-    colunaFotoId
+    colunaFotoId,
+    colunaClienteId
   );
+
+    // Idempotência: se o cliente enviou um token e já existe uma movimentação
+    // com o mesmo token, este é um REENVIO da mesma operação (retry/fallback
+    // após resposta perdida). Retorna sucesso sem gravar de novo — evitando
+    // registros de custódia duplicados. Verificado ANTES de qualquer upload
+    // de foto ou escrita.
+    var clienteMovimentacaoId = (dados.clienteMovimentacaoId || '').toString().trim();
+    if (clienteMovimentacaoId && colunaClienteId) {
+      var totalLinhasToken = sheet.getLastRow() - 1;
+      if (totalLinhasToken > 0) {
+        var tokensExistentes = sheet.getRange(2, colunaClienteId, totalLinhasToken, 1).getValues();
+        var idsExistentes = sheet.getRange(2, 1, totalLinhasToken, 1).getValues();
+        for (var t = 0; t < tokensExistentes.length; t++) {
+          var tokenLinha = (tokensExistentes[t][0] || '').toString().trim();
+          if (tokenLinha && tokenLinha === clienteMovimentacaoId) {
+            return {
+              success: true,
+              duplicado: true,
+              message: 'Movimentação já registrada',
+              id: idsExistentes[t][0]
+            };
+          }
+        }
+      }
+    }
 
     // Buscar número do armário
     var tipoArmarioNormalizado = normalizarTextoBasico(dados.tipoArmario);
@@ -7702,6 +7739,9 @@ function salvarMovimentacao(dados) {
   }
   if (colunaFotoId) {
     novaLinha[colunaFotoId - 1] = fotoIdValor;
+  }
+  if (colunaClienteId) {
+    novaLinha[colunaClienteId - 1] = clienteMovimentacaoId;
   }
 
     sheet.getRange(lastRow + 1, 1, 1, novaLinha.length).setValues([novaLinha]);
