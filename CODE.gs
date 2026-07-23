@@ -5522,8 +5522,15 @@ function salvarTermoCompleto(dadosTermo) {
       // termos órfãos e permitindo a continuação de um termo já iniciado.
 
       var dataHoraAtualCadastro = obterDataHoraAtualFormatada();
-      var horaInicioCadastro = dataHoraAtualCadastro.horaCurta;
-      var dataRegistroCadastro = dataHoraAtualCadastro.dataHoraIso;
+      // Preserva o INÍCIO original da reserva quando esta é uma re-gravação
+      // (continuação de um termo já iniciado OU retry após uma resposta perdida
+      // — callGoogleScript reenvia ações de escrita). Só define hora início/data
+      // registro na PRIMEIRA aplicação; do contrário, o horário de início seria
+      // resetado para "agora" a cada re-envio.
+      var horaInicioExistente = obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'hora inicio', '');
+      var dataRegistroExistente = obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'data registro', '');
+      var horaInicioCadastro = (termoJaExistia && horaInicioExistente) ? horaInicioExistente : dataHoraAtualCadastro.horaCurta;
+      var dataRegistroCadastro = (termoJaExistia && dataRegistroExistente) ? dataRegistroExistente : dataHoraAtualCadastro.dataHoraIso;
       var unidadeAtual = obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'unidade', '');
       var whatsappCadastro = dadosCadastroAcompanhante.whatsapp ? dadosCadastroAcompanhante.whatsapp.toString().trim() : '';
       var nomeColunaCadastro = CABECALHOS_NOME_ACOMPANHANTE;
@@ -5538,8 +5545,12 @@ function salvarTermoCompleto(dadosTermo) {
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'data registro', dataRegistroCadastro);
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, CABECALHOS_WHATSAPP, whatsappCadastro);
 
-      // Registrar histórico de uso
-      var historicoSheet = ss.getSheetByName('Histórico Acompanhantes');
+      // Registrar histórico de uso — APENAS na primeira aplicação do termo.
+      // Sem esta guarda, uma continuação de termo ou um retry (após resposta
+      // perdida) acrescentaria uma NOVA linha "EM USO" para a mesma reserva,
+      // duplicando o histórico. termoJaExistia indica que já havia um termo não
+      // finalizado para este armário — ou seja, a reserva já foi contabilizada.
+      var historicoSheet = termoJaExistia ? null : ss.getSheetByName('Histórico Acompanhantes');
       if (historicoSheet) {
         var historicoLastRow = historicoSheet.getLastRow();
         var historicoId = historicoLastRow > 1
