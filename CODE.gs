@@ -3409,6 +3409,13 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
     definirCampoComFallback('status', 'livre', statusIndex);
     definirValorLinha(novaLinha, estrutura, nomeColuna, '');
     definirNomePacienteLinha(novaLinha, estrutura, '');
+    // Limpa também o prontuário do ocupante anterior. Antes, todos os campos de
+    // identificação do paciente eram zerados na liberação, exceto o prontuário —
+    // que permanecia na linha e podia reaparecer para o próximo ocupante (dado
+    // obsoleto/vazamento de informação) quando a reserva seguinte não o
+    // sobrescrevia (ex.: paciente sem prontuário informado). A coluna já foi
+    // garantida por garantirColunaProntuario acima.
+    definirValorLinha(novaLinha, estrutura, 'prontuario', '');
     definirValorLinha(novaLinha, estrutura, 'leito', '');
     definirValorLinha(novaLinha, estrutura, 'volumes', '');
     definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -5186,6 +5193,13 @@ function salvarTermoCompleto(dadosTermo) {
       }
     }
 
+    // Guarda se JÁ existia um termo não finalizado para este armário ANTES de
+    // decidirmos onde gravar. Quando existe, estamos apenas CONTINUANDO/atualizando
+    // a reserva do próprio ocupante (fluxo "continuar termo") — o armário estar
+    // "em-uso" nesse caso é esperado e não deve bloquear o salvamento. Só um termo
+    // realmente novo sobre um armário ocupado indica conflito/estado desatualizado.
+    var termoJaExistia = linhaExistente !== -1;
+
     if (linhaExistente === -1) {
       var lastRow = sheet.getLastRow();
       termoId = lastRow > 1 ? Math.max.apply(null, sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat()) + 1 : 1;
@@ -5275,6 +5289,22 @@ function salvarTermoCompleto(dadosTermo) {
     }
 
     dadosTermo.numeroArmario = numeroArmarioOficial;
+
+    // Verificação de disponibilidade ANTES de gravar qualquer coisa (upload de
+    // fotos, linha do termo ou atualização do armário). Antes, o termo era
+    // escrito na planilha e só depois checava-se o status — se o armário
+    // estivesse ocupado, a reserva era recusada mas restava um TERMO ÓRFÃO não
+    // finalizado, que reaparecia como "Termo pendente" e atrapalhava reservas
+    // futuras. Só bloqueamos quando é um termo NOVO (não uma continuação do
+    // próprio ocupante) sobre um armário já ocupado.
+    if (!termoJaExistia && linhaAcompanhante > -1 && estruturaAcompanhantes && dadosAcompanhantes[linhaAcompanhante]) {
+      var statusOcupacaoAtual = normalizarTextoBasico(
+        obterValorLinha(dadosAcompanhantes[linhaAcompanhante], estruturaAcompanhantes, 'status', '')
+      );
+      if (statusOcupacaoAtual && statusOcupacaoAtual !== 'livre' && statusOcupacaoAtual !== 'contingencia') {
+        return { success: false, error: 'Armário já está em uso. Atualize a lista e tente novamente.' };
+      }
+    }
 
     volumes = volumes.map(function(item, indice) {
       var volumeAtual = {
@@ -5379,10 +5409,9 @@ function salvarTermoCompleto(dadosTermo) {
         dadosCadastroAcompanhante.prontuario = dadosTermo.prontuario || '';
       }
 
-      var statusAtual = normalizarTextoBasico(obterValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', ''));
-      if (statusAtual && statusAtual !== 'livre' && statusAtual !== 'contingencia') {
-        throw new Error('Armário já está em uso. Atualize a lista e tente novamente.');
-      }
+      // A verificação de "armário já está em uso" foi antecipada para antes de
+      // qualquer gravação (logo após resolver numeroArmarioOficial), evitando
+      // termos órfãos e permitindo a continuação de um termo já iniciado.
 
       var dataHoraAtualCadastro = obterDataHoraAtualFormatada();
       var horaInicioCadastro = dataHoraAtualCadastro.horaCurta;
