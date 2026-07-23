@@ -74,10 +74,10 @@
             --radius-md: 12px;
             --radius-lg: 16px;
 
-            /* Shadow scale */
-            --shadow-sm: 0 4px 12px var(--shadow-color);
-            --shadow-md: 0 12px 28px var(--shadow-color);
-            --shadow-lg: 0 24px 48px var(--shadow-color);
+            /* Shadow scale (mapped onto the layered elevation system below) */
+            --shadow-sm: var(--elevation-2);
+            --shadow-md: var(--elevation-3);
+            --shadow-lg: var(--elevation-4);
 
             /* Misc */
             --focus-ring: color-mix(in srgb, var(--primary-color) 25%, transparent);
@@ -604,6 +604,27 @@
         /* Hide mobile card list when list is empty (rich empty-state takes over) */
         .table-card-list.is-hidden-empty { display: none !important; }
 
+        /* === DS 2.0 — micro-interactions & focus (additive) === */
+        .btn:not(:disabled):active { transform: translateY(1px) scale(0.995); }
+        .btn-small {
+            transition: var(--transition-colors),
+                transform var(--duration-fast) var(--ease-standard),
+                box-shadow var(--duration-fast) var(--ease-standard),
+                filter var(--duration-fast) var(--ease-standard);
+        }
+        .btn-small:not(:disabled):hover { filter: brightness(1.05); }
+        .btn-small:not(:disabled):active { transform: translateY(1px); }
+        .btn:focus-visible,
+        .btn-small:focus-visible,
+        .filter-btn:focus-visible,
+        .toolbar-field select:focus-visible,
+        .results-count:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        /* Table rows: smooth hover using motion tokens */
+        .table-container tbody tr { transition: background-color var(--duration-fast) var(--ease-standard); }
+
         /* Achados e Perdidos */
         .glass-card {
             background: var(--glass-bg);
@@ -975,6 +996,11 @@
             color: var(--text-color);
             display: flex;
             min-height: 100vh;
+            font-size: var(--text-body);
+            line-height: var(--leading-normal);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
         }
         body.nav-open {
             overflow: hidden;
