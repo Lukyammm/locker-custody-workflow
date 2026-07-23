@@ -7,25 +7,6 @@
             console.warn('SCRIPT_URL vazio: window.SCRIPT_URL não foi definido pelo servidor. As chamadas via fetch falharão e o app dependerá do fallback google.script.run.');
         }
         // Estado da aplicação
-        function criarEstadoLiberacaoInicial() {
-            return {
-                colunas: [],
-                linhas: [],
-                filtros: {
-                    dataInicio: '',
-                    dataFim: '',
-                    paciente: '',
-                    prontuario: ''
-                },
-                chaveFiltrosAplicados: '',
-                totalPlanilha: 0,
-                totalFiltrado: 0,
-                carregando: false,
-                ultimaAtualizacao: null,
-                linhasCarregadas: false,
-                erro: ''
-            };
-        }
         function criarEstadoInicial() {
             return {
                 perfilAtual: 'geral',
@@ -44,20 +25,6 @@
                 movimentacoes: {},
                 historicoVisitantes: [],
                 historicoAcompanhantes: [],
-                achados: {
-                    itens: [],
-                    carregando: false,
-                    filtros: {
-                        busca: '',
-                        status: 'todos',
-                        dataInicio: '',
-                        dataFim: ''
-                    },
-                    resumo: {
-                        pendentes: 0,
-                        encontrados: 0
-                    }
-                },
                 usuarios: [],
                 logs: [],
                 registrosImagens: {
@@ -81,8 +48,7 @@
                     prontuario: ''
                 },
                 autenticado: false,
-                usuarioAutenticado: null,
-                liberacao: criarEstadoLiberacaoInicial()
+                usuarioAutenticado: null
             };
         }
         let estado = criarEstadoInicial();
@@ -94,12 +60,6 @@
         };
         let turnoIntervalId = null;
         let carregamentoContingenciaId = 0;
-        function obterEstadoLiberacao() {
-            if (!estado.liberacao) {
-                estado.liberacao = criarEstadoLiberacaoInicial();
-            }
-            return estado.liberacao;
-        }
         let estadoPdfTemporario = { fileId: '', url: '', embedUrl: '', timeoutId: null };
         const galeriasImagem = {};
         const estadoVisualizadorImagem = { grupo: '', indice: 0 };
@@ -820,15 +780,6 @@
             historicoAcompanhantesFiltroPessoa: document.getElementById('historico-acompanhantes-filtro-pessoa'),
             historicoAcompanhantesBusca: document.getElementById('historico-acompanhantes-busca'),
             historicoAcompanhantesBtnLimpar: document.getElementById('historico-acompanhantes-btn-limpar'),
-            tabelaLiberacao: document.getElementById('tabela-liberacao'),
-            tabelaLiberacaoHead: document.querySelector('#tabela-liberacao thead tr'),
-            tabelaLiberacaoBody: document.querySelector('#tabela-liberacao tbody'),
-            liberacaoDataInicio: document.getElementById('liberacao-data-inicio'),
-            liberacaoDataFim: document.getElementById('liberacao-data-fim'),
-            liberacaoProntuario: document.getElementById('liberacao-prontuario'),
-            liberacaoPaciente: document.getElementById('liberacao-paciente'),
-            liberacaoRefresh: document.getElementById('liberacao-refresh'),
-            liberacaoResumo: document.getElementById('liberacao-resumo'),
             impressaoReservaModal: document.getElementById('impressao-reserva-modal'),
             impressaoReservaClose: document.getElementById('impressao-reserva-close'),
             impressaoReservaFechar: document.getElementById('impressao-reserva-fechar'),
@@ -859,35 +810,6 @@
             imageViewerSummaryTitle: document.getElementById('image-viewer-summary-title'),
             imageViewerSummaryText: document.getElementById('image-viewer-summary-text'),
             imageViewerCounter: document.getElementById('image-viewer-counter'),
-            tabelaAchadosBody: document.querySelector('#tabela-achados tbody'),
-            achadosBusca: document.getElementById('achados-busca'),
-            achadosStatus: document.getElementById('achados-status'),
-            achadosDataInicio: document.getElementById('achados-data-inicio'),
-            achadosDataFim: document.getElementById('achados-data-fim'),
-            achadosResumo: document.getElementById('achados-resumo'),
-            achadosFiltroAplicado: document.getElementById('achados-filtro-aplicado'),
-            achadosEmpty: document.getElementById('achados-empty'),
-            achadosLoading: document.getElementById('achados-loading'),
-            achadosNovo: document.getElementById('achados-novo'),
-            achadosRefresh: document.getElementById('achados-refresh'),
-            achadosAplicarFiltros: document.getElementById('achados-aplicar-filtros'),
-            achadosLimparFiltros: document.getElementById('achados-limpar-filtros'),
-            achadosTotalPendentes: document.getElementById('achados-total-pendentes'),
-            achadosTotalEncontrados: document.getElementById('achados-total-encontrados'),
-            achadosCardPendentes: document.getElementById('achados-card-pendentes'),
-            achadosCardEncontrados: document.getElementById('achados-card-encontrados'),
-            achadoModal: document.getElementById('achado-modal'),
-            achadoModalTitle: document.getElementById('achado-modal-title'),
-            achadoModalClose: document.getElementById('achado-modal-close'),
-            achadoForm: document.getElementById('achado-form'),
-            achadoId: document.getElementById('achado-id'),
-            achadoDono: document.getElementById('achado-dono'),
-            achadoData: document.getElementById('achado-data'),
-            achadoTelefone: document.getElementById('achado-telefone'),
-            achadoStatusSelect: document.getElementById('achado-status'),
-            achadoDescricao: document.getElementById('achado-descricao'),
-            achadoHistorico: document.getElementById('achado-historico'),
-            achadoBtnCancelar: document.getElementById('achado-btn-cancelar'),
             logoutButton: document.getElementById('logout-button')
         };
         const mobileNavQuery = window.matchMedia('(max-width: 1024px)');
@@ -1236,18 +1158,6 @@
                 meta: ['Data', 'Hora Fim'],
                 resumo: ['Status', 'Paciente', 'Armário'],
                 detalhesPrioritarios: ['Hora Início', 'Volumes', 'Usuário', 'WhatsApp'],
-            },
-            'tabela-liberacao': {
-                principal: [0, 'Paciente', 'Armário'],
-                meta: ['Data', 'Horário', 'Data/Hora'],
-                resumo: ['Usuário', 'Status'],
-                detalhesPrioritarios: ['Prontuário', 'Unidade', 'Ações'],
-            },
-            'tabela-achados': {
-                principal: ['Descrição', 'Dono do pertence'],
-                meta: ['Data da guarda'],
-                resumo: ['Encontrado?', 'Telefone'],
-                detalhesPrioritarios: ['Dono do pertence', 'Telefone', 'Última ligação', 'Ações'],
             },
             'tabela-termos': {
                 principal: ['Paciente', 'Acompanhante'],
@@ -1704,7 +1614,6 @@
         }
         function configurarEntradasMaiusculas() {
             const camposFixos = [
-                document.getElementById('liberacao-paciente'),
                 document.getElementById('nome-paciente'),
                 document.getElementById('nome-visitante'),
                 document.getElementById('termo-resp-nome'),
@@ -2704,23 +2613,6 @@
             if (headerTitle) {
                 headerTitle.textContent = 'Monitor';
             }
-            if (elementos.liberacaoResumo) {
-                elementos.liberacaoResumo.textContent = 'Selecione um período para visualizar os registros de liberação.';
-            }
-            const padraoLocal = obterDataHoraLocalPadrao();
-            if (elementos.liberacaoDataInicio) {
-                elementos.liberacaoDataInicio.value = padraoLocal.data;
-            }
-            if (elementos.liberacaoDataFim) {
-                elementos.liberacaoDataFim.value = padraoLocal.data;
-            }
-            if (elementos.liberacaoProntuario) {
-                elementos.liberacaoProntuario.value = '';
-            }
-            if (elementos.liberacaoPaciente) {
-                elementos.liberacaoPaciente.value = '';
-            }
-            mostrarEstadoTabelaLiberacao('Selecione um período e aplique os filtros para carregar os registros de liberação.');
             termoPassoAtual = 0;
             termoArmarioAtual = null;
             movimentacaoArmarioAtual = null;
@@ -3748,15 +3640,6 @@
             elementos.usuarioModalClose.addEventListener('click', fecharModalUsuario);
             elementos.btnCancelar.addEventListener('click', fecharModalArmario);
             elementos.usuarioBtnCancelar.addEventListener('click', fecharModalUsuario);
-            if (elementos.achadoModalClose) {
-                elementos.achadoModalClose.addEventListener('click', fecharModalAchado);
-            }
-            if (elementos.achadoBtnCancelar) {
-                elementos.achadoBtnCancelar.addEventListener('click', fecharModalAchado);
-            }
-            if (elementos.achadoForm) {
-                elementos.achadoForm.addEventListener('submit', salvarAchado);
-            }
             const atualizarVisibilidadeBotaoLimparBusca = () => {
                 if (!elementos.filterSearchClear || !elementos.dashboardSearch) return;
                 const possuiTexto = (elementos.dashboardSearch.value || '').trim().length > 0;
@@ -3893,84 +3776,6 @@
             }
             atualizarBotoesFiltroDashboard();
             atualizarVisibilidadeBotaoLimparBusca();
-            configurarBotaoAcao(elementos.achadosNovo, () => abrirModalAchado());
-            configurarBotaoAcao(elementos.achadosRefresh, () => carregarAchados({ forcarAtualizacao: true }));
-            configurarBotaoAcao(elementos.achadosAplicarFiltros, () => carregarAchados({ forcarAtualizacao: true }));
-            configurarBotaoAcao(elementos.achadosLimparFiltros, () => {
-                const alvo = obterEstadoAchados();
-                alvo.filtros = { busca: '', status: 'todos', dataInicio: '', dataFim: '' };
-                if (elementos.achadosBusca) elementos.achadosBusca.value = '';
-                if (elementos.achadosStatus) elementos.achadosStatus.value = 'todos';
-                if (elementos.achadosDataInicio) elementos.achadosDataInicio.value = '';
-                if (elementos.achadosDataFim) elementos.achadosDataFim.value = '';
-                renderizarTabelaAchados();
-            });
-            if (elementos.achadosBusca) {
-                elementos.achadosBusca.addEventListener('input', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.busca = elementos.achadosBusca.value || '';
-                    renderizarTabelaAchados();
-                });
-            }
-            if (elementos.achadosStatus) {
-                elementos.achadosStatus.addEventListener('change', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.status = elementos.achadosStatus.value || 'todos';
-                    renderizarTabelaAchados();
-                });
-            }
-            if (elementos.achadosDataInicio) {
-                elementos.achadosDataInicio.addEventListener('change', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.dataInicio = elementos.achadosDataInicio.value || '';
-                    renderizarTabelaAchados();
-                });
-            }
-            if (elementos.achadosDataFim) {
-                elementos.achadosDataFim.addEventListener('change', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.dataFim = elementos.achadosDataFim.value || '';
-                    renderizarTabelaAchados();
-                });
-            }
-            const padraoLocalLiberacao = obterDataHoraLocalPadrao();
-            if (elementos.liberacaoDataInicio) {
-                const padraoInicio = converterDataTextoParaISO(elementos.liberacaoDataInicio.value) || padraoLocalLiberacao.data;
-                elementos.liberacaoDataInicio.value = padraoInicio;
-                elementos.liberacaoDataInicio.addEventListener('change', () => {
-                    const iso = converterDataTextoParaISO(elementos.liberacaoDataInicio.value);
-                    elementos.liberacaoDataInicio.value = iso || '';
-                });
-            }
-            if (elementos.liberacaoDataFim) {
-                const padraoFim = converterDataTextoParaISO(elementos.liberacaoDataFim.value) || padraoLocalLiberacao.data;
-                elementos.liberacaoDataFim.value = padraoFim;
-                elementos.liberacaoDataFim.addEventListener('change', () => {
-                    const iso = converterDataTextoParaISO(elementos.liberacaoDataFim.value);
-                    elementos.liberacaoDataFim.value = iso || '';
-                });
-            }
-            if (elementos.liberacaoProntuario) {
-                elementos.liberacaoProntuario.addEventListener('keydown', event => {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        carregarTabelaLiberacao({ forcarAtualizacao: true });
-                    }
-                });
-            }
-            if (elementos.liberacaoPaciente) {
-                elementos.liberacaoPaciente.addEventListener('keydown', event => {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        carregarTabelaLiberacao({ forcarAtualizacao: true });
-                    }
-                });
-            }
-            if (elementos.liberacaoRefresh) {
-                configurarBotaoAcao(elementos.liberacaoRefresh, async () => {
-                    await carregarTabelaLiberacao({ forcarAtualizacao: true });
-                });
-            }
             // Formulários
             elementos.armarioForm.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -4560,394 +4365,6 @@
             }
         }
 
-        // Achados e Perdidos
-        function obterEstadoAchados() {
-            if (!estado.achados) {
-                estado.achados = {
-                    itens: [],
-                    carregando: false,
-                    salvando: false,
-                    filtros: {
-                        busca: '',
-                        status: 'todos',
-                        dataInicio: '',
-                        dataFim: ''
-                    },
-                    resumo: {
-                        pendentes: 0,
-                        encontrados: 0
-                    }
-                };
-            }
-            return estado.achados;
-        }
-        function mapearItemAchado(item) {
-            const dataBruta = item?.dataGuarda;
-            const dataObjeto = dataBruta ? new Date(dataBruta) : null;
-            const historico = (item?.historicoContato || '').toString();
-            return {
-                idLinha: item?.idLinha,
-                dono: (item?.dono || '').toString(),
-                descricao: (item?.descricao || '').toString(),
-                telefone: (item?.telefone || '').toString(),
-                encontrado: Boolean(item?.encontrado),
-                encontradoTexto: item?.encontradoTexto || (item?.encontrado ? 'Sim' : 'Não'),
-                dataGuarda: dataObjeto && !isNaN(dataObjeto.getTime()) ? dataObjeto : null,
-                dataGuardaTexto: item?.dataGuardaTexto || (dataObjeto ? formatarData(dataObjeto) : '-'),
-                historicoContato: historico,
-                ultimaLigacao: obterUltimaLigacao(historico)
-            };
-        }
-        function obterUltimaLigacao(historicoTexto) {
-            if (!historicoTexto) return '';
-            const partes = historicoTexto.split(/\n+/).map(linha => linha.trim()).filter(Boolean);
-            return partes.length ? partes[partes.length - 1] : '';
-        }
-        function atualizarResumoAchados(lista = []) {
-            const alvo = obterEstadoAchados();
-            const pendentes = lista.filter(item => !item.encontrado).length;
-            const encontrados = lista.filter(item => item.encontrado).length;
-            alvo.resumo = { pendentes, encontrados };
-            if (elementos.achadosTotalPendentes) elementos.achadosTotalPendentes.textContent = pendentes;
-            if (elementos.achadosTotalEncontrados) elementos.achadosTotalEncontrados.textContent = encontrados;
-            if (elementos.achadosCardPendentes) {
-                elementos.achadosCardPendentes.classList.toggle('highlight', pendentes > 0);
-            }
-            if (elementos.achadosCardEncontrados) {
-                elementos.achadosCardEncontrados.classList.toggle('highlight', encontrados > 0);
-            }
-        }
-        function aplicarFiltrosAchados(lista) {
-            const alvo = obterEstadoAchados();
-            const { busca, status, dataInicio, dataFim } = alvo.filtros;
-            const buscaNormalizada = normalizarTextoBusca(busca);
-            const inicio = dataInicio ? new Date(dataInicio) : null;
-            const fim = dataFim ? new Date(dataFim) : null;
-
-            return lista.filter(item => {
-                if (status === 'pendentes' && item.encontrado) return false;
-                if (status === 'encontrados' && !item.encontrado) return false;
-
-                if (inicio && item.dataGuarda && item.dataGuarda < inicio) return false;
-                if (fim && item.dataGuarda && item.dataGuarda > fim) return false;
-
-                if (buscaNormalizada) {
-                    const alvoBusca = [item.dono, item.descricao, item.telefone, item.historicoContato]
-                        .map(valor => normalizarTextoBusca(valor)).join(' ');
-                    if (!alvoBusca.includes(buscaNormalizada)) return false;
-                }
-                return true;
-            });
-        }
-        function atualizarEstadoTabelaAchados() {
-            const alvo = obterEstadoAchados();
-            const carregando = alvo.carregando;
-            if (elementos.achadosLoading) elementos.achadosLoading.hidden = !carregando;
-            if (elementos.tabelaAchadosBody) elementos.tabelaAchadosBody.closest('table').hidden = carregando;
-        }
-        function renderizarTabelaAchados() {
-            const alvo = obterEstadoAchados();
-            if (!elementos.tabelaAchadosBody) return;
-
-            const filtrados = aplicarFiltrosAchados(alvo.itens);
-            elementos.tabelaAchadosBody.innerHTML = '';
-
-            filtrados.forEach(item => {
-                const linha = document.createElement('tr');
-
-                const statusPill = document.createElement('span');
-                statusPill.className = 'lf-pill';
-                statusPill.innerHTML = `<i class="fas ${item.encontrado ? 'fa-circle-check' : 'fa-clock'}"></i> ${item.encontrado ? 'Encontrado' : 'Aguardando'}`;
-
-                const ultimaLigacao = item.ultimaLigacao || '-';
-                const tdAcoes = document.createElement('td');
-                tdAcoes.className = 'lf-actions';
-
-                const btnLigar = document.createElement('button');
-                btnLigar.type = 'button';
-                btnLigar.className = 'btn btn-ghost';
-                btnLigar.innerHTML = '<i class="fas fa-phone"></i> Registrar ligação';
-                btnLigar.addEventListener('click', () => registrarLigacaoAchado(item));
-
-                const btnEditar = document.createElement('button');
-                btnEditar.type = 'button';
-                btnEditar.className = 'btn btn-ghost';
-                btnEditar.innerHTML = '<i class="fas fa-pen"></i> Editar';
-                btnEditar.addEventListener('click', () => abrirModalAchado(item));
-
-                const btnEncontrado = document.createElement('button');
-                btnEncontrado.type = 'button';
-                btnEncontrado.className = 'btn btn-primary';
-                btnEncontrado.innerHTML = `<i class="fas ${item.encontrado ? 'fa-rotate-left' : 'fa-check'}"></i> ${item.encontrado ? 'Reabrir' : 'Marcar encontrado'}`;
-                btnEncontrado.addEventListener('click', () => confirmarAlternarStatusAchado(item, btnEncontrado));
-
-                const btnExcluir = document.createElement('button');
-                btnExcluir.type = 'button';
-                btnExcluir.className = 'btn btn-ghost btn-danger-outline';
-                btnExcluir.innerHTML = '<i class="fas fa-trash"></i> Excluir';
-                btnExcluir.addEventListener('click', () => confirmarExcluirAchado(item, btnExcluir));
-
-                tdAcoes.append(btnLigar, btnEditar, btnEncontrado, btnExcluir);
-
-                linha.appendChild(criarCelulaTexto(item.dono || '-', 'Dono do pertence'));
-                linha.appendChild(criarCelulaTexto(item.dataGuardaTexto || '-', 'Data da guarda'));
-                linha.appendChild(criarCelulaTexto(item.descricao || '-', 'Descrição'));
-                linha.appendChild(criarCelulaTexto(item.telefone || '-', 'Telefone'));
-
-                const tdStatus = document.createElement('td');
-                tdStatus.dataset.label = 'Encontrado?';
-                tdStatus.appendChild(statusPill);
-                linha.appendChild(tdStatus);
-                linha.appendChild(criarCelulaTexto(ultimaLigacao || '-', 'Última ligação'));
-                tdAcoes.dataset.label = 'Ações';
-                linha.appendChild(tdAcoes);
-
-                elementos.tabelaAchadosBody.appendChild(linha);
-            });
-
-            atualizarResumoAchados(alvo.itens);
-
-            if (elementos.achadosEmpty) {
-                elementos.achadosEmpty.hidden = filtrados.length > 0 || alvo.carregando;
-            }
-            if (elementos.achadosLoading) {
-                elementos.achadosLoading.hidden = !alvo.carregando;
-            }
-            if (elementos.tabelaAchadosBody) {
-                elementos.tabelaAchadosBody.closest('table').hidden = alvo.carregando;
-            }
-            if (elementos.achadosResumo) {
-                elementos.achadosResumo.textContent = `${filtrados.length} de ${alvo.itens.length} registros`;
-            }
-            if (elementos.achadosFiltroAplicado) {
-                const filtros = [];
-                if (alvo.filtros.status !== 'todos') filtros.push(`Status: ${alvo.filtros.status === 'pendentes' ? 'Aguardando' : 'Encontrados'}`);
-                if (alvo.filtros.busca) filtros.push(`Busca: ${alvo.filtros.busca}`);
-                if (alvo.filtros.dataInicio || alvo.filtros.dataFim) {
-                    const inicio = alvo.filtros.dataInicio ? formatarData(alvo.filtros.dataInicio) : 'início';
-                    const fim = alvo.filtros.dataFim ? formatarData(alvo.filtros.dataFim) : 'hoje';
-                    filtros.push(`Período: ${inicio} a ${fim}`);
-                }
-                elementos.achadosFiltroAplicado.textContent = filtros.join(' | ');
-            }
-        }
-        function criarCelulaTexto(texto, rotulo) {
-            const td = document.createElement('td');
-            td.textContent = texto;
-            if (rotulo) {
-                td.dataset.label = rotulo;
-            }
-            return td;
-        }
-        async function carregarAchados({ forcarAtualizacao = false } = {}) {
-            const alvo = obterEstadoAchados();
-            if (!estado.autenticado) return false;
-            if (alvo.carregando) return false;
-            if (alvo.itens.length && !forcarAtualizacao) {
-                renderizarTabelaAchados();
-                return true;
-            }
-            alvo.carregando = true;
-            atualizarEstadoTabelaAchados();
-            try {
-                const resposta = await callGoogleScript('getPertencesPerdidos');
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Não foi possível carregar os pertences');
-                }
-                const itens = Array.isArray(resposta.dados) ? resposta.dados.map(mapearItemAchado) : [];
-                alvo.itens = itens;
-                renderizarTabelaAchados();
-                return true;
-            } catch (erro) {
-                mostrarErro('Erro ao carregar achados e perdidos');
-                console.error(erro);
-                return false;
-            } finally {
-                alvo.carregando = false;
-                atualizarEstadoTabelaAchados();
-            }
-        }
-        function limparFormularioAchado() {
-            if (elementos.achadoForm) elementos.achadoForm.reset();
-            if (elementos.achadoId) elementos.achadoId.value = '';
-            if (elementos.achadoStatusSelect) elementos.achadoStatusSelect.value = 'nao';
-            if (elementos.achadoHistorico) elementos.achadoHistorico.value = '';
-        }
-        function preencherFormularioAchado(item) {
-            if (!item) return;
-            if (elementos.achadoId) elementos.achadoId.value = item.idLinha || '';
-            if (elementos.achadoDono) elementos.achadoDono.value = item.dono || '';
-            if (elementos.achadoDescricao) elementos.achadoDescricao.value = item.descricao || '';
-            if (elementos.achadoTelefone) elementos.achadoTelefone.value = item.telefone || '';
-            if (elementos.achadoStatusSelect) elementos.achadoStatusSelect.value = item.encontrado ? 'sim' : 'nao';
-            if (elementos.achadoData) {
-                const isoData = item.dataGuarda instanceof Date && !Number.isNaN(item.dataGuarda.getTime())
-                    ? item.dataGuarda.toISOString().slice(0, 10)
-                    : '';
-                elementos.achadoData.value = isoData;
-            }
-            if (elementos.achadoHistorico) elementos.achadoHistorico.value = item.historicoContato || '';
-        }
-        function abrirModalAchado(item) {
-            garantirPortaisCabecalho();
-            limparFormularioAchado();
-            if (elementos.achadoModalTitle) {
-                elementos.achadoModalTitle.textContent = item ? 'Editar pertence' : 'Registrar pertence';
-            }
-            if (item) {
-                preencherFormularioAchado(item);
-            }
-            if (elementos.achadoModal && elementos.achadoModal.style.display !== 'flex') {
-                travaRolagem.aplicar();
-                elementos.achadoModal.style.display = 'flex';
-            }
-        }
-        function fecharModalAchado() {
-            if (elementos.achadoModal && elementos.achadoModal.style.display === 'flex') {
-                travaRolagem.remover();
-                elementos.achadoModal.style.display = 'none';
-            }
-        }
-        async function salvarAchado(event) {
-            if (event) event.preventDefault();
-            if (!elementos.achadoForm) return;
-            const alvo = obterEstadoAchados();
-            if (alvo.salvando) return;
-            const id = elementos.achadoId?.value || '';
-            const payload = {
-                idLinha: id,
-                dono: elementos.achadoDono?.value?.trim(),
-                descricao: elementos.achadoDescricao?.value?.trim(),
-                telefone: elementos.achadoTelefone?.value?.trim(),
-                dataGuarda: elementos.achadoData?.value || '',
-                encontrado: (elementos.achadoStatusSelect?.value || 'nao') === 'sim',
-                historicoContato: elementos.achadoHistorico?.value || ''
-            };
-
-            const botaoSalvar = elementos.achadoBtnCancelar?.nextElementSibling || elementos.achadoForm.querySelector('button[type="submit"]');
-            const finalizar = botaoSalvar ? iniciarLoadingBotao(botaoSalvar) : () => {};
-            if (botaoSalvar) botaoSalvar.disabled = true;
-            alvo.salvando = true;
-            try {
-                const acao = id ? 'atualizarPertencePerdido' : 'cadastrarPertencePerdido';
-                // Evita envios duplicados em caso de falha de comunicação
-                // ao limitar a chamada a uma única tentativa.
-                const resposta = await callGoogleScript(acao, payload, { tentativas: 1 });
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Falha ao salvar');
-                }
-                mostrarSucesso('Registro salvo com sucesso.');
-                fecharModalAchado();
-                await carregarAchados({ forcarAtualizacao: true });
-            } catch (erro) {
-                console.error(erro);
-                mostrarErro('Não foi possível salvar o pertence.');
-            } finally {
-                alvo.salvando = false;
-                if (botaoSalvar) botaoSalvar.disabled = false;
-                finalizar();
-            }
-        }
-        async function confirmarExcluirAchado(item, botaoAcao) {
-            if (!item || !item.idLinha) return;
-            const resultado = await Swal.fire({
-                title: 'Excluir pertence?',
-                text: 'Essa ação remove o registro da planilha.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sim, excluir',
-                cancelButtonText: 'Cancelar'
-            });
-            if (resultado.isDismissed) return;
-
-            const finalizarLoading = iniciarLoadingBotao(botaoAcao);
-            if (botaoAcao) botaoAcao.setAttribute('aria-busy', 'true');
-            try {
-                await excluirAchado(item);
-            } finally {
-                if (botaoAcao) botaoAcao.removeAttribute('aria-busy');
-                finalizarLoading();
-            }
-        }
-        async function excluirAchado(item) {
-            try {
-                const resposta = await callGoogleScript('excluirPertencePerdido', { idLinha: item.idLinha }, { tentativas: 1 });
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Falha ao excluir pertence');
-                }
-                mostrarSucesso('Pertence excluído.');
-                await carregarAchados({ forcarAtualizacao: true });
-                return true;
-            } catch (erro) {
-                console.error(erro);
-                mostrarErro('Não foi possível excluir o pertence.');
-                return false;
-            }
-        }
-        async function confirmarAlternarStatusAchado(item, botaoAcao) {
-            if (!item) return;
-            const marcarEncontrado = !item.encontrado;
-            const resultado = await Swal.fire({
-                title: marcarEncontrado ? 'Confirmar devolução?' : 'Reabrir pertence?',
-                text: marcarEncontrado
-                    ? 'Confirme que o pertence foi devolvido ao dono.'
-                    : 'O pertence voltará a ficar como aguardando retirada.',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: marcarEncontrado ? 'Sim, marcar encontrado' : 'Sim, reabrir',
-                cancelButtonText: 'Cancelar'
-            });
-            if (resultado.isDismissed) return;
-
-            const finalizarLoading = iniciarLoadingBotao(botaoAcao);
-            if (botaoAcao) botaoAcao.setAttribute('aria-busy', 'true');
-            try {
-                await alternarEncontradoAchado(item, marcarEncontrado);
-            } finally {
-                if (botaoAcao) botaoAcao.removeAttribute('aria-busy');
-                finalizarLoading();
-            }
-        }
-        async function alternarEncontradoAchado(item, novoValor) {
-            if (!item || !item.idLinha) return false;
-            try {
-                const resposta = await callGoogleScript('atualizarPertencePerdido', { idLinha: item.idLinha, encontrado: novoValor });
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Falha ao atualizar pertence');
-                }
-                mostrarSucesso(novoValor ? 'Pertence marcado como encontrado.' : 'Pertence reaberto.');
-                await carregarAchados({ forcarAtualizacao: true });
-                return true;
-            } catch (erro) {
-                console.error(erro);
-                mostrarErro('Não foi possível atualizar o status.');
-                return false;
-            }
-        }
-        async function registrarLigacaoAchado(item) {
-            if (!item || !item.idLinha) return;
-            const resultado = await Swal.fire({
-                title: 'Registrar ligação',
-                input: 'textarea',
-                inputLabel: 'Anote o que foi conversado',
-                inputPlaceholder: 'Ex.: Liguei para Maria, informou que busca amanhã às 10h',
-                confirmButtonText: 'Registrar',
-                cancelButtonText: 'Cancelar',
-                showCancelButton: true
-            });
-            if (resultado.isDismissed) return;
-            const anotacao = (resultado.value || '').toString();
-            const resposta = await callGoogleScript('registrarContatoPertence', {
-                idLinha: item.idLinha,
-                anotacao
-            });
-            if (!resposta.success) {
-                mostrarErro('Não foi possível registrar a ligação.');
-                return;
-            }
-            mostrarSucesso('Ligação registrada.');
-            await carregarAchados({ forcarAtualizacao: true });
-        }
         function obterFiltrosAtivosDashboard() {
             if (!Array.isArray(estado.filtrosSelecionados) || estado.filtrosSelecionados.length === 0) {
                 estado.filtrosSelecionados = ['todos'];
@@ -5510,12 +4927,6 @@
                     case 'historico-acompanhantes':
                         await carregarHistoricoAcompanhantes();
                         break;
-                    case 'liberacao':
-                        await carregarTabelaLiberacao();
-                        break;
-                    case 'achados-perdidos':
-                        await carregarAchados({ forcarAtualizacao: true });
-                        break;
                     case 'termo-responsabilidade':
                         await carregarTabelaTermos({ recarregarArmarios });
                         break;
@@ -5541,258 +4952,6 @@
             } catch (error) {
                 console.error('Erro ao carregar dados da tabela:', error);
                 mostrarErro('Erro ao carregar dados');
-            }
-        }
-        function mostrarEstadoTabelaLiberacao(mensagem, tipo = 'empty') {
-            const tbody = elementos.tabelaLiberacaoBody;
-            if (!tbody) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            const colunas = Math.max(
-                estadoLiberacao.colunas?.length || estadoLiberacao.linhas?.[0]?.length || 0,
-                7
-            );
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = colunas;
-            if (tipo === 'loading') {
-                td.className = 'table-loading';
-            } else if (tipo === 'error') {
-                td.className = 'table-error';
-            } else {
-                td.className = 'table-empty';
-            }
-            td.textContent = mensagem;
-            tr.appendChild(td);
-            tbody.innerHTML = '';
-            tbody.appendChild(tr);
-        }
-        function atualizarResumoLiberacao() {
-            const resumoEl = elementos.liberacaoResumo;
-            if (!resumoEl) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            if (estadoLiberacao.carregando) {
-                resumoEl.textContent = 'Carregando registros de liberação...';
-                return;
-            }
-            if (estadoLiberacao.erro) {
-                resumoEl.textContent = estadoLiberacao.erro;
-                return;
-            }
-            if (!estadoLiberacao.linhasCarregadas) {
-                resumoEl.textContent = 'Selecione um período para visualizar os registros de liberação.';
-                return;
-            }
-            const filtros = estadoLiberacao.filtros || {};
-            let periodoDescricao = '';
-            if (filtros.dataInicio && filtros.dataFim) {
-                periodoDescricao = filtros.dataInicio === filtros.dataFim
-                    ? formatarData(filtros.dataInicio)
-                    : `${formatarData(filtros.dataInicio)} a ${formatarData(filtros.dataFim)}`;
-            }
-            const detalhes = [];
-            if (periodoDescricao) {
-                detalhes.push(`Período: ${periodoDescricao}`);
-            }
-            if (filtros.prontuario) {
-                detalhes.push(`Prontuário: ${filtros.prontuario}`);
-            }
-            if (filtros.paciente) {
-                detalhes.push(`Paciente: ${filtros.paciente}`);
-            }
-            if (!estadoLiberacao.totalFiltrado) {
-                resumoEl.textContent = detalhes.length
-                    ? `Nenhum registro encontrado (${detalhes.join(' • ')}).`
-                    : 'Nenhum registro encontrado para o período selecionado.';
-                return;
-            }
-            const horaAtualizacao = estadoLiberacao.ultimaAtualizacao
-                ? new Date(estadoLiberacao.ultimaAtualizacao)
-                : new Date();
-            const horaFormatada = horaAtualizacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            const totalPlanilha = estadoLiberacao.totalPlanilha || estadoLiberacao.totalFiltrado;
-            const prefixo = `${estadoLiberacao.totalFiltrado} de ${totalPlanilha} registros exibidos`;
-            const detalhesTexto = detalhes.length ? `${detalhes.join(' • ')} • ` : '';
-            resumoEl.textContent = `${prefixo} • ${detalhesTexto}Atualizado às ${horaFormatada}`;
-        }
-        function renderizarTabelaLiberacao() {
-            const headRow = elementos.tabelaLiberacaoHead;
-            const tbody = elementos.tabelaLiberacaoBody;
-            if (!headRow || !tbody) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            const colunas = Array.isArray(estadoLiberacao.colunas) ? estadoLiberacao.colunas : [];
-            const linhas = Array.isArray(estadoLiberacao.linhas) ? estadoLiberacao.linhas : [];
-            const totalColunas = colunas.length || (linhas[0]?.length ?? 0);
-            headRow.innerHTML = '';
-            if (colunas.length) {
-                const fragmentHead = document.createDocumentFragment();
-                colunas.forEach(coluna => {
-                    const th = document.createElement('th');
-                    th.scope = 'col';
-                    th.textContent = coluna || '';
-                    fragmentHead.appendChild(th);
-                });
-                headRow.appendChild(fragmentHead);
-            }
-            tbody.innerHTML = '';
-            if (!linhas.length) {
-                mostrarEstadoTabelaLiberacao('Nenhum registro encontrado para o período selecionado.');
-                return;
-            }
-            const fragmentBody = document.createDocumentFragment();
-            linhas.forEach(linha => {
-                const tr = document.createElement('tr');
-                const limiteColunas = totalColunas || linha.length;
-                for (let i = 0; i < limiteColunas; i++) {
-                    const td = document.createElement('td');
-                    const valor = linha[i] !== undefined && linha[i] !== null ? linha[i] : '';
-                    td.textContent = valor;
-                    tr.appendChild(td);
-                }
-                fragmentBody.appendChild(tr);
-            });
-            tbody.appendChild(fragmentBody);
-        }
-        function obterFiltrosLiberacaoDoFormulario() {
-            return {
-                dataInicio: converterDataTextoParaISO(elementos.liberacaoDataInicio?.value || ''),
-                dataFim: converterDataTextoParaISO(elementos.liberacaoDataFim?.value || ''),
-                paciente: elementos.liberacaoPaciente?.value?.trim() || '',
-                prontuario: elementos.liberacaoProntuario?.value?.trim() || ''
-            };
-        }
-        function sanearFiltrosLiberacao(filtros = {}) {
-            const padraoLocal = obterDataHoraLocalPadrao().data;
-            const paciente = (filtros.paciente || '').toString().trim();
-            const prontuario = (filtros.prontuario || '').toString().trim();
-            const filtroTextoAtivo = Boolean(paciente || prontuario);
-            let dataInicio = converterDataTextoParaISO(filtros.dataInicio || '') || '';
-            let dataFim = converterDataTextoParaISO(filtros.dataFim || '') || '';
-
-            if (!filtroTextoAtivo) {
-                if (dataInicio && !dataFim) {
-                    dataFim = dataInicio;
-                }
-                if (dataFim && !dataInicio) {
-                    dataInicio = dataFim;
-                }
-                if (!dataInicio && !dataFim) {
-                    dataInicio = padraoLocal;
-                    dataFim = padraoLocal;
-                }
-            } else {
-                if (dataInicio && !dataFim) {
-                    dataFim = dataInicio;
-                }
-                if (dataFim && !dataInicio) {
-                    dataInicio = dataFim;
-                }
-            }
-
-            return { dataInicio, dataFim, paciente, prontuario };
-        }
-        function gerarChaveFiltroLiberacao(filtros = {}) {
-            return JSON.stringify({
-                dataInicio: filtros.dataInicio || '',
-                dataFim: filtros.dataFim || '',
-                paciente: normalizarTexto(filtros.paciente || ''),
-                prontuario: normalizarTexto(filtros.prontuario || '')
-            });
-        }
-        function sincronizarCamposFiltroLiberacao(filtros = {}) {
-            if (elementos.liberacaoDataInicio) {
-                elementos.liberacaoDataInicio.value = filtros.dataInicio || '';
-            }
-            if (elementos.liberacaoDataFim) {
-                elementos.liberacaoDataFim.value = filtros.dataFim || '';
-            }
-            if (elementos.liberacaoProntuario) {
-                elementos.liberacaoProntuario.value = filtros.prontuario || '';
-            }
-            if (elementos.liberacaoPaciente) {
-                elementos.liberacaoPaciente.value = filtros.paciente || '';
-            }
-        }
-        async function carregarTabelaLiberacao(opcoes = {}) {
-            const tabela = elementos.tabelaLiberacao;
-            if (!tabela) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            const { filtros: filtrosOverride, forcarAtualizacao = false } = opcoes;
-            const filtrosFormulario = obterFiltrosLiberacaoDoFormulario();
-            const filtrosAtuais = sanearFiltrosLiberacao({
-                dataInicio: filtrosOverride?.dataInicio ?? filtrosFormulario.dataInicio ?? estadoLiberacao.filtros?.dataInicio,
-                dataFim: filtrosOverride?.dataFim ?? filtrosFormulario.dataFim ?? estadoLiberacao.filtros?.dataFim,
-                paciente: filtrosOverride?.paciente ?? filtrosFormulario.paciente ?? estadoLiberacao.filtros?.paciente,
-                prontuario: filtrosOverride?.prontuario ?? filtrosFormulario.prontuario ?? estadoLiberacao.filtros?.prontuario
-            });
-            sincronizarCamposFiltroLiberacao(filtrosAtuais);
-            if (!filtrosAtuais.dataInicio || !filtrosAtuais.dataFim) {
-                estadoLiberacao.erro = 'Informe um período válido para realizar a busca.';
-                estadoLiberacao.linhasCarregadas = false;
-                estadoLiberacao.linhas = [];
-                mostrarEstadoTabelaLiberacao('Informe um período válido para realizar a busca.', 'error');
-                atualizarResumoLiberacao();
-                return;
-            }
-            if (filtrosAtuais.dataInicio > filtrosAtuais.dataFim) {
-                estadoLiberacao.erro = 'A data inicial não pode ser posterior à data final.';
-                estadoLiberacao.linhasCarregadas = false;
-                estadoLiberacao.linhas = [];
-                mostrarEstadoTabelaLiberacao('A data inicial não pode ser posterior à data final.', 'error');
-                atualizarResumoLiberacao();
-                return;
-            }
-            const chaveFiltroAtual = gerarChaveFiltroLiberacao(filtrosAtuais);
-            if (!forcarAtualizacao && estadoLiberacao.linhasCarregadas && estadoLiberacao.chaveFiltrosAplicados === chaveFiltroAtual) {
-                estadoLiberacao.filtros = filtrosAtuais;
-                atualizarResumoLiberacao();
-                renderizarTabelaLiberacao();
-                return;
-            }
-            estadoLiberacao.carregando = true;
-            estadoLiberacao.erro = '';
-            estadoLiberacao.filtros = filtrosAtuais;
-            estadoLiberacao.chaveFiltrosAplicados = chaveFiltroAtual;
-            atualizarResumoLiberacao();
-            mostrarEstadoTabelaLiberacao('Carregando registros...', 'loading');
-            try {
-                const resultado = await callGoogleScript('getPlanilhaLiberacao', {
-                    dataInicio: filtrosAtuais.dataInicio,
-                    dataFim: filtrosAtuais.dataFim,
-                    paciente: filtrosAtuais.paciente,
-                    prontuario: filtrosAtuais.prontuario
-                });
-                if (!resultado.success) {
-                    throw new Error(resultado.error || 'Falha ao obter dados.');
-                }
-                estadoLiberacao.colunas = Array.isArray(resultado.columns) ? resultado.columns : [];
-                estadoLiberacao.linhas = Array.isArray(resultado.rows) ? resultado.rows : [];
-                estadoLiberacao.totalPlanilha = Number(resultado.totalPlanilha) || estadoLiberacao.linhas.length;
-                estadoLiberacao.totalFiltrado = Number(resultado.totalFiltrado) || estadoLiberacao.linhas.length;
-                estadoLiberacao.ultimaAtualizacao = Date.now();
-                estadoLiberacao.linhasCarregadas = true;
-                const filtrosRetornados = sanearFiltrosLiberacao({
-                    dataInicio: resultado?.filtro?.dataInicio || filtrosAtuais.dataInicio,
-                    dataFim: resultado?.filtro?.dataFim || filtrosAtuais.dataFim,
-                    paciente: resultado?.filtro?.paciente ?? filtrosAtuais.paciente,
-                    prontuario: resultado?.filtro?.prontuario ?? filtrosAtuais.prontuario
-                });
-                estadoLiberacao.filtros = filtrosRetornados;
-                estadoLiberacao.chaveFiltrosAplicados = gerarChaveFiltroLiberacao(filtrosRetornados);
-                estadoLiberacao.erro = '';
-                sincronizarCamposFiltroLiberacao(filtrosRetornados);
-                renderizarTabelaLiberacao();
-            } catch (erro) {
-                console.error('Erro ao carregar dados de liberação:', erro);
-                estadoLiberacao.erro = 'Não foi possível carregar os registros de liberação.';
-                estadoLiberacao.linhas = [];
-                estadoLiberacao.linhasCarregadas = false;
-                estadoLiberacao.totalPlanilha = 0;
-                estadoLiberacao.totalFiltrado = 0;
-                mostrarEstadoTabelaLiberacao('Não foi possível carregar os registros de liberação.', 'error');
-                mostrarErro('Não foi possível carregar os registros de liberação.');
-            } finally {
-                estadoLiberacao.carregando = false;
-                atualizarResumoLiberacao();
             }
         }
         // === Filtros de lista (busca + selects) + estados vazio/carregando + contador ===
