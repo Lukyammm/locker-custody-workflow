@@ -13,7 +13,7 @@ Este manual detalha todos os recursos do Cosign para controle de armários de vi
 - O front-end grava dados mínimos de sessão no navegador para reabrir o app, mas o acesso depende dos dados na planilha.
 
 ## 2. Estrutura geral da interface
-- **Menu lateral**: navegação entre todas as páginas (Monitor, Visitantes, Acompanhantes, Históricos, Liberações, Achados e Perdidos, Termo de Responsabilidade, Cadastros e LOGS).
+- **Menu lateral**: navegação entre todas as páginas (Monitor, Visitantes, Acompanhantes, Históricos, Termo de Responsabilidade, Cadastros e LOGS).
 - **Cabeçalho**: título da página, saudação com perfil e turno, seletores de **Perfil** (geral/visitante/acompanhante) e **Unidade**, alternância de tema, sino de notificações e avatar do usuário.
 - **Filtro rápido**: os seletores de Perfil e Unidade afetam listagens e cards em todas as páginas.
 
@@ -61,22 +61,7 @@ Este manual detalha todos os recursos do Cosign para controle de armários de vi
 **Armazenamento**
 - Dados vêm das abas **Visitantes** e **Acompanhantes**, filtrados pelos status de término.
 
-### 3.6 Liberações
-- Filtro por **Data inicial** e **Data final** (obrigatórios) e, opcionalmente, por **Prontuário** ou **Paciente**.
-- Clique em **Aplicar filtros** para carregar apenas os registros no intervalo.
-- Útil para conferência diária das devoluções e entregas.
-
-**Armazenamento**
-- Os dados são lidos da aba **Liberação** da planilha principal. Há integração opcional com uma planilha externa dedicada, definida pelas constantes de configuração (`PLANILHA_LIBERACAO_ID`, aba `LIBERACAO`).
-
-### 3.7 Achados e Perdidos
-- Registra itens encontrados nos armários.
-- Preencha identificação do item, armário, data/hora e observações. Use a coluna **Ações** para resolver ou devolver.
-
-**Armazenamento**
-- Os registros são escritos na planilha de Achados e Perdidos configurada (`PLANILHA_PERTENCES_PERDIDOS_ID`, aba `PERTENCES PERDIDOS GUARDA-VOLUMES`). A planilha externa guarda o histórico e pode ser consultada diretamente.
-
-### 3.8 Termo de Responsabilidade
+### 3.6 Termo de Responsabilidade
 - Página dedicada aos armários de acompanhantes.
 - **Lista de termos**: mostra status (pendente/aplicado), data de aplicação e link do PDF.
 - **Assistente (wizard) em 3 passos**:
@@ -90,28 +75,28 @@ Este manual detalha todos os recursos do Cosign para controle de armários de vi
 - Dados textuais do termo ficam na aba **Termos de Responsabilidade** da planilha principal.
 - Fotos obrigatórias (volumes, movimentações e entrega) são salvas na pasta `PASTA_DRIVE_FOTOS_ID` e indexadas em **Registro de Imagens** com contexto (termo ou movimentação). A pasta **temporária** (`PASTA_DRIVE_TEMP_ID`) é usada para compor o PDF antes de gravar na pasta final.
 
-### 3.9 Cadastro de Armários
+### 3.7 Cadastro de Armários
 - Cria ou edita armários com número, tipo (visitante ou acompanhante), unidade, localização, status e observações.
 - Use para marcar armários como ativos, bloqueados ou em manutenção.
 
 **Armazenamento**
 - Mantido na aba **Armários** da planilha principal. O Monitor lê esses status para classificar disponibilidade.
 
-### 3.10 Cadastro de Unidades
+### 3.8 Cadastro de Unidades
 - Mantém a lista de setores/unidades e indica se estão ativas.
 - Impacta os filtros e a criação de novos registros em todas as páginas.
 
 **Armazenamento**
 - Dados na aba **Unidades** da planilha principal.
 
-### 3.11 Usuários
+### 3.9 Usuários
 - Cadastre nome, e-mail, senha, papel (admin ou usuário) e permissões de acesso (visitantes, acompanhantes e unidades autorizadas).
 - Use a coluna **Ações** para editar ou remover usuários.
 
 **Armazenamento**
 - Todos os usuários ficam na aba **Usuários** da planilha principal. A autenticação do login consulta esta aba.
 
-### 3.12 LOGS
+### 3.10 LOGS
 - Painel de auditoria das ações executadas no sistema (cadastros, finalizações, erros de imagem, etc.).
 - Ajuda a rastrear quem realizou cada operação e quando.
 
@@ -128,19 +113,17 @@ Este manual detalha todos os recursos do Cosign para controle de armários de vi
 ## 5. Recuperação de documentos e evidências
 - **PDF do termo**: disponível na coluna de ações da página Termo de Responsabilidade e guardado na pasta do Drive (`PASTA_DRIVE_ID`).
 - **Fotos**: acessíveis pela aba **Registro de Imagens** na planilha ou pelos botões de cada armário (Monitor, Acompanhantes, Termos). A coluna da planilha contém ID, URL, nome do arquivo, contexto e data/hora.
-- **Planilhas de apoio**: Achados e Perdidos e Liberação podem ser abertas diretamente nos IDs configurados, caso precise validar ou exportar dados.
 
 ## 6. Boas práticas de uso diário
 1. Ajuste **Perfil** e **Unidade** antes de operar para evitar lançamentos no setor errado.
 2. Preencha todos os campos obrigatórios e confira horários para prevenir alertas de atraso.
 3. Garanta que fotos estejam nítidas e com tamanho dentro do limite (até 2 MB por imagem).
-4. No fim do turno, revise armários **Vencidos**, finalize termos pendentes e registre devoluções em **Liberações**.
+4. No fim do turno, revise armários **Vencidos** e finalize termos pendentes.
 5. Use o botão **Sair** para encerrar a sessão.
 
 ## 7. Limitações conhecidas
 - Dependência de conectividade com Google Drive e Google Sheets para salvar PDFs, fotos e registros.
 - Tamanho máximo das imagens depende das cotas do Apps Script para arquivos base64.
-- A disponibilidade dos dados externos (Achados e Perdidos, Liberação) depende das planilhas configuradas e de suas permissões de acesso.
 
 ## 8. Onde cada informação é salva (resumo rápido)
 - **Visitantes**: aba `Visitantes` na planilha principal.
@@ -148,8 +131,6 @@ Este manual detalha todos os recursos do Cosign para controle de armários de vi
 - **Contingência**: aba `Contingência` + pasta de fotos `PASTA_DRIVE_FOTOS_ID` + índice `Registro de Imagens`.
 - **Termos de Responsabilidade**: aba `Termos de Responsabilidade` + PDFs em `PASTA_DRIVE_ID` + fotos em `PASTA_DRIVE_FOTOS_ID` + pasta temporária `PASTA_DRIVE_TEMP_ID` para montagem.
 - **Movimentações e volumes**: imagens salvas em `PASTA_DRIVE_FOTOS_ID` e indexadas em `Registro de Imagens` com data/hora e contexto.
-- **Liberações**: aba `Liberação` (ou planilha externa `PLANILHA_LIBERACAO_ID`).
-- **Achados e Perdidos**: planilha externa `PLANILHA_PERTENCES_PERDIDOS_ID`, aba `PERTENCES PERDIDOS GUARDA-VOLUMES`.
 - **Cadastros de Armários**: aba `Armários`.
 - **Cadastros de Unidades**: aba `Unidades`.
 - **Usuários**: aba `Usuários`.
