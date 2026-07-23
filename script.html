@@ -1290,6 +1290,7 @@
                     gerenciadorCartoesTabela.registrar(tabela, config);
                 }
             });
+            inicializarFiltrosLista();
         }
         popularAvataresPadrao();
         sincronizarSelecaoAvatar();
@@ -5794,11 +5795,128 @@
                 atualizarResumoLiberacao();
             }
         }
+        // === Filtros de lista (busca + selects) + estados vazio/carregando + contador ===
+        const configFiltrosLista = {
+            visitantes: {
+                tabela: 'tabela-visitantes', busca: 'visitantes-busca',
+                contador: 'visitantes-contador', vazio: 'visitantes-vazio', carregando: 'visitantes-carregando',
+                selects: [{ id: 'visitantes-filtro-status', attr: 'status' }],
+                rotulo: ['armário', 'armários'],
+            },
+            acompanhantes: {
+                tabela: 'tabela-acompanhantes', busca: 'acompanhantes-busca',
+                contador: 'acompanhantes-contador', vazio: 'acompanhantes-vazio', carregando: 'acompanhantes-carregando',
+                selects: [{ id: 'acompanhantes-filtro-status', attr: 'status' }],
+                rotulo: ['armário', 'armários'],
+            },
+            'cadastro-armarios': {
+                tabela: 'tabela-cadastro-armarios', busca: 'cadastro-armarios-busca',
+                contador: 'cadastro-armarios-contador', vazio: 'cadastro-armarios-vazio', carregando: 'cadastro-armarios-carregando',
+                selects: [
+                    { id: 'cadastro-armarios-filtro-tipo', attr: 'tipo' },
+                    { id: 'cadastro-armarios-filtro-status', attr: 'status' },
+                ],
+                rotulo: ['armário', 'armários'],
+            },
+            'cadastro-unidades': {
+                tabela: 'tabela-unidades', busca: 'cadastro-unidades-busca',
+                contador: 'cadastro-unidades-contador', vazio: 'cadastro-unidades-vazio', carregando: 'cadastro-unidades-carregando',
+                selects: [{ id: 'cadastro-unidades-filtro-status', attr: 'status' }],
+                rotulo: ['unidade', 'unidades'],
+            },
+            usuarios: {
+                tabela: 'tabela-usuarios', busca: 'usuarios-busca',
+                contador: 'usuarios-contador', vazio: 'usuarios-vazio', carregando: 'usuarios-carregando',
+                selects: [
+                    { id: 'usuarios-filtro-perfil', attr: 'perfil' },
+                    { id: 'usuarios-filtro-status', attr: 'status' },
+                ],
+                rotulo: ['usuário', 'usuários'],
+            },
+        };
+        function definirCarregandoLista(nome, carregando) {
+            const cfg = configFiltrosLista[nome];
+            if (!cfg) return;
+            const tabela = document.getElementById(cfg.tabela);
+            const carregandoEl = document.getElementById(cfg.carregando);
+            const vazioEl = document.getElementById(cfg.vazio);
+            const contadorEl = document.getElementById(cfg.contador);
+            const cardList = tabela?.parentElement?.querySelector('.table-card-list');
+            if (carregandoEl) carregandoEl.classList.toggle('is-visible', !!carregando);
+            if (carregando) {
+                if (vazioEl) vazioEl.classList.remove('is-visible');
+                if (tabela) tabela.style.display = 'none';
+                if (cardList) cardList.classList.add('is-hidden-empty');
+                if (contadorEl) contadorEl.textContent = '';
+            }
+        }
+        function aplicarFiltroLista(nome) {
+            const cfg = configFiltrosLista[nome];
+            if (!cfg) return;
+            const tabela = document.getElementById(cfg.tabela);
+            if (!tabela || !tabela.tBodies[0]) return;
+            const carregandoEl = document.getElementById(cfg.carregando);
+            if (carregandoEl) carregandoEl.classList.remove('is-visible');
+            const termo = normalizarTexto((document.getElementById(cfg.busca) || {}).value || '');
+            const selects = (cfg.selects || []).map(s => ({
+                attr: s.attr,
+                valor: normalizarTexto((document.getElementById(s.id) || {}).value || 'todos'),
+            }));
+            const linhas = Array.from(tabela.tBodies[0].rows);
+            let visiveis = 0;
+            linhas.forEach(tr => {
+                if (tr.dataset.placeholder === 'true') { tr.hidden = true; return; }
+                let ok = true;
+                selects.forEach(s => {
+                    if (s.valor && s.valor !== 'todos' && normalizarTexto(tr.dataset[s.attr] || '') !== s.valor) {
+                        ok = false;
+                    }
+                });
+                if (ok && termo) {
+                    const alvo = normalizarTexto(tr.dataset.busca || tr.textContent || '');
+                    if (!alvo.includes(termo)) ok = false;
+                }
+                tr.hidden = !ok;
+                if (ok) visiveis += 1;
+            });
+            const vazioEl = document.getElementById(cfg.vazio);
+            const contadorEl = document.getElementById(cfg.contador);
+            const cardList = tabela.parentElement?.querySelector('.table-card-list');
+            const vazio = visiveis === 0;
+            if (vazioEl) vazioEl.classList.toggle('is-visible', vazio);
+            tabela.style.display = vazio ? 'none' : '';
+            if (cardList) cardList.classList.toggle('is-hidden-empty', vazio);
+            if (contadorEl) {
+                const [sing, plur] = cfg.rotulo || ['registro', 'registros'];
+                contadorEl.innerHTML = `<strong>${visiveis}</strong> ${visiveis === 1 ? sing : plur}`;
+            }
+            if (gerenciadorCartoesTabela) gerenciadorCartoesTabela.reconstruirTabelaPorId(cfg.tabela);
+        }
+        let filtrosListaInicializados = false;
+        function inicializarFiltrosLista() {
+            if (filtrosListaInicializados) return;
+            filtrosListaInicializados = true;
+            Object.entries(configFiltrosLista).forEach(([nome, cfg]) => {
+                const busca = document.getElementById(cfg.busca);
+                if (busca) {
+                    let debounce = null;
+                    busca.addEventListener('input', () => {
+                        if (debounce) clearTimeout(debounce);
+                        debounce = setTimeout(() => aplicarFiltroLista(nome), 160);
+                    });
+                }
+                (cfg.selects || []).forEach(s => {
+                    const el = document.getElementById(s.id);
+                    if (el) el.addEventListener('change', () => aplicarFiltroLista(nome));
+                });
+            });
+        }
         async function carregarTabelaVisitantes(unidadeFiltro, opcoes = {}) {
             const { recarregarArmarios = true } = opcoes;
             const tbodyVisitantes = document.querySelector('#tabela-visitantes tbody');
             if (!tbodyVisitantes) return;
             if (recarregarArmarios || !estado.armariosCarregados) {
+                definirCarregandoLista('visitantes', true);
                 await carregarArmarios({ forcarAtualizacao: recarregarArmarios, incluirTermos: false });
             }
             tbodyVisitantes.innerHTML = '';
@@ -5807,12 +5925,10 @@
                 .filter(armario => normalizarTexto(armario.tipo) === 'visitante')
                 .filter(a => filtroNormalizado === 'todas' || normalizarTexto(a.unidade) === filtroNormalizado)
                 .filter(a => usuarioPodeVerUnidade(a.unidade));
-            if (!armariosVisitantes.length) {
-                tbodyVisitantes.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum armário encontrado.</td></tr>';
-                return;
-            }
             armariosVisitantes.forEach(armario => {
                 const tr = document.createElement('tr');
+                tr.dataset.status = armario.status || 'livre';
+                tr.dataset.busca = normalizarTexto([armario.numero, armario.unidade, armario.nomeVisitante, armario.nomePaciente, armario.leito, armario.whatsapp].filter(Boolean).join(' '));
                 if (armario.visitaEstendida) {
                     tr.classList.add('visita-estendida');
                 }
@@ -5839,12 +5955,14 @@
                 `;
                 tbodyVisitantes.appendChild(tr);
             });
+            aplicarFiltroLista('visitantes');
         }
         async function carregarTabelaAcompanhantes(unidadeFiltro, opcoes = {}) {
             const { recarregarArmarios = true } = opcoes;
             const tbodyAcompanhantes = document.querySelector('#tabela-acompanhantes tbody');
             if (!tbodyAcompanhantes) return;
             if (recarregarArmarios || !estado.armariosCarregados) {
+                definirCarregandoLista('acompanhantes', true);
                 await carregarArmarios({ forcarAtualizacao: recarregarArmarios, incluirTermos: true });
             }
             tbodyAcompanhantes.innerHTML = '';
@@ -5853,13 +5971,11 @@
                 .filter(armario => normalizarTexto(armario.tipo) === 'acompanhante')
                 .filter(a => filtroNormalizado === 'todas' || normalizarTexto(a.unidade) === filtroNormalizado)
                 .filter(a => usuarioPodeVerUnidade(a.unidade));
-            if (!armariosAcompanhantes.length) {
-                tbodyAcompanhantes.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum armário encontrado.</td></tr>';
-                return;
-            }
             armariosAcompanhantes.forEach(armario => {
                 const tr = document.createElement('tr');
                 const statusArmarioNormalizado = normalizarTexto(armario.status);
+                tr.dataset.status = armario.status || 'livre';
+                tr.dataset.busca = normalizarTexto([armario.numero, armario.unidade, armario.nomeAcompanhante, armario.nomeVisitante, armario.nomePaciente, armario.leito, armario.whatsapp].filter(Boolean).join(' '));
                 const statusTermoNormalizado = normalizarTexto(armario.termoStatus);
                 const botoesTermo = statusArmarioNormalizado !== 'livre'
                     ? (statusTermoNormalizado === 'pendente'
@@ -5887,6 +6003,7 @@
                 `;
                 tbodyAcompanhantes.appendChild(tr);
             });
+            aplicarFiltroLista('acompanhantes');
         }
         function obterArmariosAcompanhantesLivres(filtroTexto = '') {
             const filtroNormalizado = normalizarTexto(filtroTexto);
@@ -6289,8 +6406,15 @@
         async function carregarCadastroArmarios(unidadeFiltro) {
             const tbody = document.querySelector('#tabela-cadastro-armarios tbody');
             if (!tbody) return;
+            definirCarregandoLista('cadastro-armarios', true);
             const resultado = await callGoogleScript('getCadastroArmarios');
-            if (!resultado.success) return;
+            if (!resultado.success) {
+                const carregandoEl = document.getElementById('cadastro-armarios-carregando');
+                if (carregandoEl) carregandoEl.classList.remove('is-visible');
+                const tabelaEl = document.getElementById('tabela-cadastro-armarios');
+                if (tabelaEl) tabelaEl.style.display = '';
+                return;
+            }
             tbody.innerHTML = '';
             const filtroNormalizado = normalizarTexto(unidadeFiltro);
             estado.cadastroArmarios = resultado.data.map(armario => ({
@@ -6300,12 +6424,11 @@
             const armariosFiltrados = estado.cadastroArmarios
                 .filter(armario => filtroNormalizado === 'todas' || normalizarTexto(armario.unidade) === filtroNormalizado)
                 .filter(armario => usuarioPodeVerUnidade(armario.unidade));
-            if (!armariosFiltrados.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum armário cadastrado para esta unidade.</td></tr>';
-                return;
-            }
             armariosFiltrados.forEach(armario => {
                 const tr = document.createElement('tr');
+                tr.dataset.status = normalizarTexto(armario.status);
+                tr.dataset.tipo = normalizarTexto(armario.tipo);
+                tr.dataset.busca = normalizarTexto([armario.numero, armario.unidade, armario.localizacao].filter(Boolean).join(' '));
                 tr.innerHTML = `
                     <td>${armario.id}</td>
                     <td>${armario.numero}</td>
@@ -6320,17 +6443,20 @@
                 `;
                 tbody.appendChild(tr);
             });
+            aplicarFiltroLista('cadastro-armarios');
         }
         async function carregarTabelaUsuarios() {
             const tbody = elementos.tabelaUsuariosBody;
             if (!tbody) return;
             tbody.innerHTML = '';
             if (!perfilAtualEhAdmin()) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:12px; color:#c0392b;">Apenas administradores podem visualizar os usuários.</td></tr>';
-                return;
-            }
-            if (!estado.usuarios.length) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum usuário cadastrado.</td></tr>';
+                const vazioEl = document.getElementById('usuarios-vazio');
+                const carregandoEl = document.getElementById('usuarios-carregando');
+                const tabelaEl = document.getElementById('tabela-usuarios');
+                if (carregandoEl) carregandoEl.classList.remove('is-visible');
+                if (tabelaEl) tabelaEl.style.display = '';
+                if (vazioEl) vazioEl.classList.remove('is-visible');
+                tbody.innerHTML = '<tr data-placeholder="true"><td colspan="9" class="table-empty">Apenas administradores podem visualizar os usuários.</td></tr>';
                 return;
             }
             estado.usuarios.forEach(usuario => {
@@ -6338,6 +6464,9 @@
                 const perfilDescricao = usuario.perfil === 'admin' ? 'Administrador' : 'Usuário';
                 const unidadesDescricao = obterDescricaoUnidades(usuario.unidades);
                 const statusDescricao = normalizarTexto(usuario.status) === 'ativo' ? 'Ativo' : 'Inativo';
+                tr.dataset.perfil = normalizarTexto(usuario.perfil) === 'admin' ? 'admin' : 'usuario';
+                tr.dataset.status = normalizarTexto(usuario.status) === 'ativo' ? 'ativo' : 'inativo';
+                tr.dataset.busca = normalizarTexto([usuario.nome, usuario.email, usuario.matricula, unidadesDescricao].filter(Boolean).join(' '));
                 tr.innerHTML = `
                     <td>${usuario.id}</td>
                     <td>${usuario.nome}</td>
@@ -6354,6 +6483,7 @@
                 `;
                 tbody.appendChild(tr);
             });
+            aplicarFiltroLista('usuarios');
         }
         function renderizarOpcoesUnidadesFormulario(selecionadas = []) {
             if (!elementos.usuarioUnidades) return;
@@ -7235,6 +7365,8 @@
                     .filter(armario => normalizarTexto(armario.unidade) === normalizarTexto(nomeLimpo)).length;
                 const statusClasse = unidade.status === 'ativa' ? 'status-livre' : 'status-vencido';
                 const tr = document.createElement('tr');
+                tr.dataset.status = normalizarTexto(unidade.status) === 'ativa' ? 'ativa' : 'inativa';
+                tr.dataset.busca = normalizarTexto(nomeLimpo);
                 tr.innerHTML = `
                     <td>${unidade.id}</td>
                     <td>${nomeLimpo}</td>
@@ -7247,6 +7379,7 @@
                 `;
                 elementos.tabelaUnidadesBody.appendChild(tr);
             });
+            aplicarFiltroLista('cadastro-unidades');
         }
         function tratarAcaoUnidade(evento) {
             const botao = evento.target.closest('button[data-acao-unidade]');

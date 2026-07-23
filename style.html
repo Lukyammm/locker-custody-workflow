@@ -601,6 +601,9 @@
         /* Numeric alignment helper */
         td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
+        /* Hide mobile card list when list is empty (rich empty-state takes over) */
+        .table-card-list.is-hidden-empty { display: none !important; }
+
         /* Achados e Perdidos */
         .glass-card {
             background: var(--glass-bg);
