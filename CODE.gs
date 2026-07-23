@@ -3409,6 +3409,7 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
     definirCampoComFallback('status', 'livre', statusIndex);
     definirValorLinha(novaLinha, estrutura, nomeColuna, '');
     definirNomePacienteLinha(novaLinha, estrutura, '');
+    definirValorLinha(novaLinha, estrutura, 'prontuario', '');
     definirValorLinha(novaLinha, estrutura, 'leito', '');
     definirValorLinha(novaLinha, estrutura, 'volumes', '');
     definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -3423,7 +3424,7 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
     definirValorLinha(novaLinha, estrutura, 'termo aplicado', false);
     definirValorLinha(novaLinha, estrutura, CABECALHOS_OBSERVACOES, '');
 
-    sheet.getRange(linhaPlanilha, 1, 1, totalColunas).setValues([novaLinha]);
+    sheet.getRange(linhaPlanilha, 1, 1, novaLinha.length).setValues([novaLinha]);
 
     // Atualizar histórico - encontrar a entrada mais recente deste armário
     var historicoLastRow = historicoSheet.getLastRow();
@@ -5240,7 +5241,7 @@ function salvarTermoCompleto(dadosTermo) {
       dadosAcompanhantes = sheetAcompanhantes.getDataRange().getValues();
       for (var indiceA = 1; indiceA < dadosAcompanhantes.length; indiceA++) {
         var linha = dadosAcompanhantes[indiceA];
-        if (linha && linha[0] == dadosTermo.armarioId) {
+        if (linha && (linha[0] == dadosTermo.armarioId || linha[0] == normalizarIdentificador(dadosTermo.armarioId))) {
           linhaAcompanhante = indiceA;
           if (linha.length > 1 && linha[1]) {
             numeroArmarioOficial = linha[1];
@@ -5391,7 +5392,7 @@ function salvarTermoCompleto(dadosTermo) {
       var whatsappCadastro = dadosCadastroAcompanhante.whatsapp ? dadosCadastroAcompanhante.whatsapp.toString().trim() : '';
       var nomeColunaCadastro = CABECALHOS_NOME_ACOMPANHANTE;
 
-      definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', 'em-uso');
+      definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', 'EM USO');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, nomeColunaCadastro, dadosCadastroAcompanhante.nomeVisitante || dadosTermo.acompanhante || '');
       definirNomePacienteLinha(linhaAtualizada, estruturaAcompanhantes, dadosCadastroAcompanhante.nomePaciente || dadosTermo.paciente || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'prontuario', dadosCadastroAcompanhante.prontuario || dadosTermo.prontuario || '');
@@ -5428,7 +5429,7 @@ function salvarTermoCompleto(dadosTermo) {
         historicoSheet.getRange(historicoLastRow + 1, 1, 1, historicoLinha.length).setValues([historicoLinha]);
       }
 
-      sheetAcompanhantes.getRange(linhaAcompanhante + 1, 1, 1, totalColunasAcompanhantes).setValues([linhaAtualizada]);
+      sheetAcompanhantes.getRange(linhaAcompanhante + 1, 1, 1, linhaAtualizada.length).setValues([linhaAtualizada]);
     }
 
     limparCacheTermos();
@@ -8016,7 +8017,7 @@ function copiarDepoisLimparAba(abaOrigem, abaDestino) {
 
   var destinoLinha = Math.max(abaDestino.getLastRow(), 1) + 1;
   abaDestino.getRange(destinoLinha, 1, dados.length, ultimaColuna).setValues(dados);
-  abaOrigem.getRange(2, 1, quantidade, ultimaColuna).clearContent();
+  abaOrigem.deleteRows(2, quantidade);
 
   return dados.length;
 }
@@ -8058,7 +8059,8 @@ function executarBackupSistema() {
       { origem: 'Histórico Acompanhantes', arquivo: arquivoBackupGeral },
       { origem: 'Registro de Imagens', arquivo: arquivoBackupGeral },
       { origem: 'LOGS', arquivo: arquivoBackupLogs },
-      { origem: 'Termos de Responsabilidade', arquivo: arquivoBackupTermos }
+      { origem: 'Termos de Responsabilidade', arquivo: arquivoBackupTermos },
+      { origem: 'Movimentações', arquivo: arquivoBackupGeral }
     ];
 
     mapeamento.forEach(function(item) {
