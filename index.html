@@ -312,11 +312,35 @@
             <!-- Visitantes -->
             <div class="page" id="visitantes">
                 <div class="data-table">
-                    <div class="table-header">
-                        <h3>Armários de Visitantes</h3>
-                        <button class="btn btn-primary" id="btn-novo-visitante">
-                            <i class="fas fa-plus"></i> Novo Cadastro
-                        </button>
+                    <div class="page-head">
+                        <div class="page-head-text">
+                            <span class="page-kicker"><i class="fas fa-user-clock" aria-hidden="true"></i> Operação</span>
+                            <h3>Armários de Visitantes</h3>
+                            <p class="page-subtitle">Acompanhe, filtre e libere os armários de visitantes em uso.</p>
+                        </div>
+                        <div class="page-head-actions">
+                            <button class="btn btn-primary" id="btn-novo-visitante">
+                                <i class="fas fa-plus"></i> Novo Cadastro
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input type="text" id="visitantes-busca" placeholder="Buscar por visitante, paciente, armário ou leito" aria-label="Buscar visitantes">
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="visitantes-filtro-status">Status</label>
+                            <select id="visitantes-filtro-status">
+                                <option value="todos">Todos</option>
+                                <option value="livre">Livre</option>
+                                <option value="em-uso">Em uso</option>
+                                <option value="proximo">Próximo do horário</option>
+                                <option value="vencido">Vencido</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-spacer"></div>
+                        <span class="results-count" id="visitantes-contador" aria-live="polite"></span>
                     </div>
                     <div class="table-container">
                         <table id="tabela-visitantes">
@@ -339,17 +363,51 @@
                                 <!-- Dados serão preenchidos via JavaScript -->
                             </tbody>
                         </table>
+                        <div class="table-state" id="visitantes-carregando">
+                            <div class="loader"></div>
+                            <p class="table-state-desc">Carregando armários de visitantes...</p>
+                        </div>
+                        <div class="table-state" id="visitantes-vazio">
+                            <span class="table-state-icon"><i class="fas fa-user-clock" aria-hidden="true"></i></span>
+                            <span class="table-state-title">Nenhum armário encontrado</span>
+                            <span class="table-state-desc">Ajuste a busca ou o filtro de status para ver outros registros.</span>
+                        </div>
                     </div>
                 </div>
             </div>
             <!-- Acompanhantes -->
             <div class="page" id="acompanhantes">
                 <div class="data-table">
-                    <div class="table-header">
-                        <h3>Armários de Acompanhantes</h3>
-                        <button class="btn btn-primary" id="btn-novo-acompanhante">
-                            <i class="fas fa-plus"></i> Novo Cadastro
-                        </button>
+                    <div class="page-head">
+                        <div class="page-head-text">
+                            <span class="page-kicker"><i class="fas fa-user-friends" aria-hidden="true"></i> Operação</span>
+                            <h3>Armários de Acompanhantes</h3>
+                            <p class="page-subtitle">Acompanhe termos, filtre e libere os armários de acompanhantes.</p>
+                        </div>
+                        <div class="page-head-actions">
+                            <button class="btn btn-primary" id="btn-novo-acompanhante">
+                                <i class="fas fa-plus"></i> Novo Cadastro
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input type="text" id="acompanhantes-busca" placeholder="Buscar por acompanhante, paciente, armário ou leito" aria-label="Buscar acompanhantes">
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="acompanhantes-filtro-status">Status</label>
+                            <select id="acompanhantes-filtro-status">
+                                <option value="todos">Todos</option>
+                                <option value="livre">Livre</option>
+                                <option value="em-uso">Em uso</option>
+                                <option value="proximo">Próximo do horário</option>
+                                <option value="vencido">Vencido</option>
+                                <option value="contingencia">Contingência</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-spacer"></div>
+                        <span class="results-count" id="acompanhantes-contador" aria-live="polite"></span>
                     </div>
                     <div class="table-container">
                         <table id="tabela-acompanhantes">
@@ -371,6 +429,15 @@
                                 <!-- Dados serão preenchidos via JavaScript -->
                             </tbody>
                         </table>
+                        <div class="table-state" id="acompanhantes-carregando">
+                            <div class="loader"></div>
+                            <p class="table-state-desc">Carregando armários de acompanhantes...</p>
+                        </div>
+                        <div class="table-state" id="acompanhantes-vazio">
+                            <span class="table-state-icon"><i class="fas fa-user-friends" aria-hidden="true"></i></span>
+                            <span class="table-state-title">Nenhum armário encontrado</span>
+                            <span class="table-state-desc">Ajuste a busca ou o filtro de status para ver outros registros.</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -699,11 +766,41 @@
             <!-- Cadastro de Armários -->
             <div class="page" id="cadastro-armarios">
                 <div class="data-table">
-                    <div class="table-header">
-                        <h3>Cadastro de Armários</h3>
-                        <button class="btn btn-primary" id="btn-novo-armario">
-                            <i class="fas fa-plus"></i> Novo Armário
-                        </button>
+                    <div class="page-head">
+                        <div class="page-head-text">
+                            <span class="page-kicker"><i class="fas fa-archive" aria-hidden="true"></i> Administração</span>
+                            <h3>Cadastro de Armários</h3>
+                            <p class="page-subtitle">Gerencie os armários físicos, tipos, unidades e localizações.</p>
+                        </div>
+                        <div class="page-head-actions">
+                            <button class="btn btn-primary" id="btn-novo-armario">
+                                <i class="fas fa-plus"></i> Novo Armário
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input type="text" id="cadastro-armarios-busca" placeholder="Buscar por número, unidade ou localização" aria-label="Buscar armários">
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="cadastro-armarios-filtro-tipo">Tipo</label>
+                            <select id="cadastro-armarios-filtro-tipo">
+                                <option value="todos">Todos</option>
+                                <option value="visitante">Visitante</option>
+                                <option value="acompanhante">Acompanhante</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="cadastro-armarios-filtro-status">Status</label>
+                            <select id="cadastro-armarios-filtro-status">
+                                <option value="todos">Todos</option>
+                                <option value="ativo">Ativo</option>
+                                <option value="inativo">Inativo</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-spacer"></div>
+                        <span class="results-count" id="cadastro-armarios-contador" aria-live="polite"></span>
                     </div>
                     <div class="table-container">
                         <table id="tabela-cadastro-armarios">
@@ -722,17 +819,48 @@
                                 <!-- Dados serão preenchidos via JavaScript -->
                             </tbody>
                         </table>
+                        <div class="table-state" id="cadastro-armarios-carregando">
+                            <div class="loader"></div>
+                            <p class="table-state-desc">Carregando armários cadastrados...</p>
+                        </div>
+                        <div class="table-state" id="cadastro-armarios-vazio">
+                            <span class="table-state-icon"><i class="fas fa-archive" aria-hidden="true"></i></span>
+                            <span class="table-state-title">Nenhum armário cadastrado</span>
+                            <span class="table-state-desc">Ajuste os filtros ou cadastre um novo armário para começar.</span>
+                        </div>
                     </div>
                 </div>
             </div>
             <!-- Cadastro de Unidades -->
             <div class="page" id="cadastro-unidades">
                 <div class="data-table">
-                    <div class="table-header">
-                        <h3>Cadastro de Unidades</h3>
-                        <button class="btn btn-primary" id="btn-nova-unidade">
-                            <i class="fas fa-plus"></i> Nova Unidade
-                        </button>
+                    <div class="page-head">
+                        <div class="page-head-text">
+                            <span class="page-kicker"><i class="fas fa-hospital" aria-hidden="true"></i> Administração</span>
+                            <h3>Cadastro de Unidades</h3>
+                            <p class="page-subtitle">Gerencie as unidades e acompanhe os armários vinculados a cada uma.</p>
+                        </div>
+                        <div class="page-head-actions">
+                            <button class="btn btn-primary" id="btn-nova-unidade">
+                                <i class="fas fa-plus"></i> Nova Unidade
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input type="text" id="cadastro-unidades-busca" placeholder="Buscar por nome da unidade" aria-label="Buscar unidades">
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="cadastro-unidades-filtro-status">Status</label>
+                            <select id="cadastro-unidades-filtro-status">
+                                <option value="todos">Todos</option>
+                                <option value="ativa">Ativa</option>
+                                <option value="inativa">Inativa</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-spacer"></div>
+                        <span class="results-count" id="cadastro-unidades-contador" aria-live="polite"></span>
                     </div>
                     <div class="table-container">
                         <table id="tabela-unidades">
@@ -749,17 +877,56 @@
                                 <!-- Dados serão preenchidos via JavaScript -->
                             </tbody>
                         </table>
+                        <div class="table-state" id="cadastro-unidades-carregando">
+                            <div class="loader"></div>
+                            <p class="table-state-desc">Carregando unidades...</p>
+                        </div>
+                        <div class="table-state" id="cadastro-unidades-vazio">
+                            <span class="table-state-icon"><i class="fas fa-hospital" aria-hidden="true"></i></span>
+                            <span class="table-state-title">Nenhuma unidade encontrada</span>
+                            <span class="table-state-desc">Ajuste a busca ou cadastre uma nova unidade.</span>
+                        </div>
                     </div>
                 </div>
             </div>
             <!-- Usuários -->
             <div class="page" id="usuarios">
                 <div class="data-table">
-                    <div class="table-header">
-                        <h3>Usuários do Sistema</h3>
-                        <button class="btn btn-primary" id="btn-novo-usuario">
-                            <i class="fas fa-plus"></i> Novo Usuário
-                        </button>
+                    <div class="page-head">
+                        <div class="page-head-text">
+                            <span class="page-kicker"><i class="fas fa-users" aria-hidden="true"></i> Administração</span>
+                            <h3>Usuários do Sistema</h3>
+                            <p class="page-subtitle">Controle acessos, perfis e o status dos usuários da operação.</p>
+                        </div>
+                        <div class="page-head-actions">
+                            <button class="btn btn-primary" id="btn-novo-usuario">
+                                <i class="fas fa-plus"></i> Novo Usuário
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-toolbar">
+                        <div class="toolbar-search">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input type="text" id="usuarios-busca" placeholder="Buscar por nome, matrícula ou e-mail" aria-label="Buscar usuários">
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="usuarios-filtro-perfil">Perfil</label>
+                            <select id="usuarios-filtro-perfil">
+                                <option value="todos">Todos</option>
+                                <option value="admin">Administrador</option>
+                                <option value="usuario">Usuário</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-field">
+                            <label for="usuarios-filtro-status">Status</label>
+                            <select id="usuarios-filtro-status">
+                                <option value="todos">Todos</option>
+                                <option value="ativo">Ativo</option>
+                                <option value="inativo">Inativo</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-spacer"></div>
+                        <span class="results-count" id="usuarios-contador" aria-live="polite"></span>
                     </div>
                     <div class="table-container">
                         <table id="tabela-usuarios">
@@ -780,6 +947,15 @@
                                 <!-- Dados serão preenchidos via JavaScript -->
                             </tbody>
                         </table>
+                        <div class="table-state" id="usuarios-carregando">
+                            <div class="loader"></div>
+                            <p class="table-state-desc">Carregando usuários...</p>
+                        </div>
+                        <div class="table-state" id="usuarios-vazio">
+                            <span class="table-state-icon"><i class="fas fa-users" aria-hidden="true"></i></span>
+                            <span class="table-state-title">Nenhum usuário encontrado</span>
+                            <span class="table-state-desc">Ajuste os filtros ou cadastre um novo usuário.</span>
+                        </div>
                     </div>
                 </div>
             </div>
