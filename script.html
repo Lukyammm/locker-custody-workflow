@@ -1,4 +1,4 @@
-<script>
+﻿<script>
         // URL do Google Apps Script, injetada automaticamente pelo servidor em
         // window.SCRIPT_URL (ver doGet/index.html). Reflete sempre a implantação
         // atual vinculada à planilha — não é preciso escrever nenhum link aqui.
@@ -2198,6 +2198,10 @@
                 ? opcoes.intervaloInicial
                 : 400;
             const payload = { ...(data || {}) };
+            const sessaoAtual = typeof restaurarSessaoUsuario === 'function' ? restaurarSessaoUsuario() : null;
+            if (sessaoAtual && sessaoAtual.token) {
+                payload._token = sessaoAtual.token;
+            }
             if (!Object.prototype.hasOwnProperty.call(payload, 'usuarioId')) {
                 const usuarioAtual = obterUsuarioAutenticado();
                 if (usuarioAtual && usuarioAtual.id !== undefined && usuarioAtual.id !== null) {
@@ -2393,8 +2397,19 @@
             if (!elementos.loginForm) {
                 return;
             }
+            
+            let tentativasLogin = 0;
+            let bloqueioLoginAte = 0;
+
             elementos.loginForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
+
+                if (Date.now() < bloqueioLoginAte) {
+                    const restantes = Math.ceil((bloqueioLoginAte - Date.now()) / 1000);
+                    atualizarFeedbackLogin('error', `Muitas tentativas falhas. Tente novamente em ${restantes}s.`);
+                    return;
+                }
+
                 const usuarioLogin = elementos.loginUsuario?.value.trim();
                 const senha = elementos.loginSenha?.value.trim();
                 atualizarFeedbackLogin();
@@ -2407,9 +2422,17 @@
                 try {
                     const resultado = await callGoogleScript('autenticarUsuario', { usuario: usuarioLogin, matricula: usuarioLogin, senha });
                     if (!resultado.success) {
-                        atualizarFeedbackLogin('error', resultado.error || 'Credenciais inválidas.');
+                        tentativasLogin++;
+                        if (tentativasLogin >= 5) {
+                            bloqueioLoginAte = Date.now() + 60000;
+                            tentativasLogin = 0;
+                            atualizarFeedbackLogin('error', 'Muitas tentativas falhas. Aguarde 1 minuto.');
+                        } else {
+                            atualizarFeedbackLogin('error', resultado.error || 'Credenciais inválidas.');
+                        }
                         return;
                     }
+                    tentativasLogin = 0;
                     const usuarioAutenticado = resultado.usuario || {};
                     usuarioAutenticado.perfil = (usuarioAutenticado.perfil || 'usuario').toString().trim().toLowerCase();
                     usuarioAutenticado.unidades = normalizarListaDeUnidades(usuarioAutenticado.unidades);
@@ -11037,3 +11060,6 @@
         window.abrirTermoDireto = abrirTermoDireto;
         window.abrirMovimentacoes = abrirMovimentacoes;
     </script>
+
+
+
