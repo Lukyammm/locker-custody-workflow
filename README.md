@@ -1,49 +1,62 @@
-# Locker Custody Workflow
+<div align="center">
+  
+  # Locker Custody Workflow
 
-Repository: `locker-custody-workflow`
+  ![Status](https://img.shields.io/badge/Status-Ativo-success?style=for-the-badge)
+  ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+  ![Version](https://img.shields.io/badge/Version-1.0-orange?style=for-the-badge)
 
-## Overview
+</div>
 
-Administrative web app for controlled locker usage, custody terms, user sessions, notifications, and audit trails.
+<br/>
 
-## Main Capabilities
+## 🎯 Visão Geral
+**Locker Custody Workflow** é uma solução focada na área da saúde e operações clínicas. Este repositório contém as ferramentas e os recursos necessários para melhorar processos, trazer clareza de dados e otimizar fluxos de trabalho. 
 
-- Cosign-style sidebar with dashboard, lockers, terms, notifications, and audit views.
-- Locker state monitoring for in-use, available, expiring, contingency, and overdue records.
-- Draft persistence for custody terms and locker movements.
-- Header preferences for profile, unit, theme, avatar, and session state.
+> *Nota: Este projeto faz parte do portfólio de soluções clínicas e analíticas para gestão hospitalar e eficiência corporativa.*
 
-## Operating Flow
+---
 
-1. The user signs in and selects profile and unit context.
-2. The dashboard shows locker availability and overdue items.
-3. The term workflow collects required fields, saves drafts, and registers the movement.
-4. Notifications and audit entries keep the operation traceable.
+## ✨ Principais Recursos
 
-## Visual System Guide
+- **📊 Dashboards Analíticos:** Visualização clara e moderna de métricas críticas.
+- **⚙️ Otimização de Processos:** Fluxos de trabalho digitais que reduzem o esforço burocrático.
+- **🏥 Foco Clínico/Hospitalar:** Desenvolvido visando a realidade das operações de saúde.
+- **🔒 Segurança e Qualidade:** Foco em compliance e melhoria contínua.
 
-> The screens below are documentation mockups based on the components, labels, colors, and workflows found in this repository. All displayed data is fictitious and does not represent real patients, staff members, or institutions.
+---
 
-### Cosign - locker dashboard
-![Cosign - locker dashboard](./docs/screenshots/dashboard.svg)
+## 💻 Tecnologias e Estrutura
 
-### Cosign - terms and release workflow
-![Cosign - terms and release workflow](./docs/screenshots/workflow-board.svg)
+Este projeto utiliza práticas modernas de desenvolvimento para garantir manutenção simplificada e escalabilidade.
 
-### Cosign - audit and session state
-![Cosign - audit and session state](./docs/screenshots/audit-log.svg)
+- Padrões visuais atualizados
+- Estrutura clara de diretórios
+- Foco em usabilidade
 
-## Data Privacy
+---
 
-The repository documentation and guide images use fictitious sample data only.
+## 🚀 Como Começar
 
-## Technologies
+1. Clone o repositório:
+   ```bash
+   git clone https://github.com/Lukyammm/locker-custody-workflow.git
+   ```
+2. Acesse a pasta do projeto:
+   ```bash
+   cd locker-custody-workflow
+   ```
+3. Consulte a documentação interna para mais detalhes de configuração e execução.
 
-- JavaScript
-- HTML/CSS
-- Google Apps Script
-- Google Sheets
+---
 
-## Status
+## 🤝 Contato e Contribuição
 
-Completed
+Feito com dedicação por **Lukyam Madeira**.
+Sinta-se à vontade para explorar, abrir *issues* para dúvidas ou sugerir melhorias.
+
+<div align="center">
+  <a href="https://github.com/Lukyammm">
+    <img src="https://img.shields.io/badge/GitHub-Lukyammm-181717?style=flat-square&logo=github" alt="GitHub" />
+  </a>
+</div>

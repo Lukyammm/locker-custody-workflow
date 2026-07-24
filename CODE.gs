@@ -205,6 +205,32 @@ function definirValorLinhaFlexivel(linha, estrutura, chaves, valor) {
 var CABECALHOS_WHATSAPP = ['whatsapp', 'wpp', 'whats app', 'whatsap', 'zap'];
 var CABECALHOS_NOME_VISITANTE = ['nome visitante', 'visitante', 'nome do visitante'];
 var CABECALHOS_NOME_ACOMPANHANTE = ['nome acompanhante', 'acompanhante', 'nome do acompanhante', 'responsavel', 'responsável'];
+// Lista flexível para o nome do PACIENTE. Antes o nome era gravado/lido pela
+// chave rígida 'nome paciente': se o cabeçalho da planilha divergisse
+// ('Paciente', 'Nome do Paciente', coluna deslocada), a GRAVAÇÃO era
+// silenciosamente ignorada (definirValorLinha sem fallback) enquanto a LEITURA
+// caía no índice 4 vazio — e o nome aparecia como "-" mesmo tendo sido digitado.
+var CABECALHOS_NOME_PACIENTE = ['nome paciente', 'nome do paciente', 'paciente', 'nome_paciente', 'nomepaciente'];
+// Índice 4 é a posição canônica de "Nome Paciente" nas abas Visitantes e
+// Acompanhantes; usado como fallback comum de leitura E escrita para garantir
+// que os dois lados sempre apontem para a MESMA coluna.
+var INDICE_PADRAO_NOME_PACIENTE = 4;
+function obterIndicePaciente(estrutura) {
+  return obterIndiceColuna(estrutura, CABECALHOS_NOME_PACIENTE, INDICE_PADRAO_NOME_PACIENTE);
+}
+// Gravação garantida do nome do paciente: resolve a coluna pela lista flexível
+// (com o mesmo fallback da leitura) e escreve por índice — nunca "engole" o
+// valor como o definirValorLinha rígido fazia quando o cabeçalho não batia.
+function definirNomePacienteLinha(linha, estrutura, valor) {
+  var indice = obterIndicePaciente(estrutura);
+  if (indice === null || indice === undefined || indice < 0) {
+    return;
+  }
+  while (linha.length <= indice) {
+    linha.push('');
+  }
+  linha[indice] = valor;
+}
 var CABECALHOS_VISITA_ESTENDIDA = ['visita estendida', 'visita extendida', 'visita expandida'];
 var CABECALHOS_OBSERVACOES = ['observacoes', 'observações', 'observacao', 'observação', 'obs'];
 
@@ -616,19 +642,6 @@ const LOCK_TIMEOUT_MS = 5000;
 const RETRY_MAX_TENTATIVAS = 3;
 const RETRY_INTERVALO_MS = 180;
 const LIMIAR_LOG_LENTO_MS = 1200;
-
-// Configuração da planilha de liberações externas
-const PLANILHA_LIBERACAO_ID = '1UR6ynp6nxbpVMephgKkT8_YDc_ih5bYK565IebfojPI';
-const PLANILHA_LIBERACAO_ABA = 'LIBERACAO';
-const PLANILHA_LIBERACAO_LINHA_CABECALHO = 10;
-const PLANILHA_LIBERACAO_COLUNA_DATA = 4; // Coluna D
-
-// Achados e Perdidos
-const PLANILHA_PERTENCES_PERDIDOS_ID = '1OhOr91MpGsRjJXWb1kdLXNI2NCBBvsjidAc4utfgRJ0';
-const PLANILHA_PERTENCES_PERDIDOS_ABA = 'PERTENCES PERDIDOS GUARDA-VOLUMES';
-const PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO = 3;
-const PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL = 2; // Coluna B
-
 
 // Base clínica externa (Pentaho)
 const PLANILHA_ENTRADA_CLINICA_ID = '1ap8BnfjHTpF4KcwuyxGKJEUKddSZnkl3Ldfp3gDAmxg';
@@ -1375,6 +1388,12 @@ function converterParaDataHoraIso(valor, padrao) {
 
 var MAX_TENTATIVAS_LOGIN = 5;
 var BLOQUEIO_LOGIN_MINUTOS = 10;
+var TAMANHO_CODIGO_RESET_SENHA = 6;
+var VALIDADE_CODIGO_RESET_SENHA_MINUTOS = 10;
+var MAX_TENTATIVAS_RESET_SENHA = 5;
+var BLOQUEIO_RESET_SENHA_MINUTOS = 10;
+var TAMANHO_MINIMO_SENHA = 6;
+var MENSAGEM_LOGIN_INVALIDO = 'Usuário ou senha inválidos';
 
 function gerarSaltSenha() {
   return Utilities.getUuid();
@@ -1421,6 +1440,22 @@ function validarSenha(senhaInformada, senhaArmazenada) {
   var salt = partes[0];
   var hash = partes.slice(1).join(':');
   return calcularHashSenha(senhaInformada, salt) === hash;
+}
+
+function validarForcaSenha(senha) {
+  var texto = (senha || '').toString();
+  if (texto.length < TAMANHO_MINIMO_SENHA) {
+    return { ok: false, error: 'A senha deve ter pelo menos ' + TAMANHO_MINIMO_SENHA + ' caracteres' };
+  }
+  return { ok: true };
+}
+
+function validarFormatoEmail(email) {
+  var texto = (email || '').toString().trim();
+  if (!texto) {
+    return true;
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto);
 }
 
 function obterCacheLogin() {
@@ -1617,11 +1652,7 @@ function handlePost(e) {
     cadastrarUnidade: true,
     alternarStatusUnidade: true,
     salvarTermoCompleto: true,
-    finalizarTermo: true,
-    cadastrarPertencePerdido: true,
-    atualizarPertencePerdido: true,
-    registrarContatoPertence: true,
-    excluirPertencePerdido: true
+    finalizarTermo: true
   };
 
   if (acoesComLock[action] && (!e.parameter._lockApplied || e.parameter._lockApplied !== '1')) {
@@ -1697,6 +1728,18 @@ function handlePost(e) {
         return ContentService.createTextOutput(JSON.stringify(autenticarUsuario(e.parameter)))
           .setMimeType(ContentService.MimeType.JSON);
 
+      case 'alterarMinhaSenha':
+        return ContentService.createTextOutput(JSON.stringify(alterarMinhaSenha(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'solicitarResetSenha':
+        return ContentService.createTextOutput(JSON.stringify(solicitarResetSenha(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'confirmarResetSenha':
+        return ContentService.createTextOutput(JSON.stringify(confirmarResetSenha(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
       case 'registrarContingencia':
         return ContentService.createTextOutput(JSON.stringify(registrarContingencia(e.parameter)))
           .setMimeType(ContentService.MimeType.JSON);
@@ -1719,10 +1762,6 @@ function handlePost(e) {
 
       case 'getHistorico':
         return ContentService.createTextOutput(JSON.stringify(getHistorico(e.parameter.tipo)))
-          .setMimeType(ContentService.MimeType.JSON);
-
-      case 'getPlanilhaLiberacao':
-        return ContentService.createTextOutput(JSON.stringify(getPlanilhaLiberacao(e.parameter)))
           .setMimeType(ContentService.MimeType.JSON);
 
       case 'getCadastroArmarios':
@@ -1797,28 +1836,16 @@ function handlePost(e) {
         return ContentService.createTextOutput(JSON.stringify(inicializarPlanilha()))
           .setMimeType(ContentService.MimeType.JSON);
 
-      case 'getPertencesPerdidos':
-        return ContentService.createTextOutput(JSON.stringify(listarPertencesPerdidos()))
-          .setMimeType(ContentService.MimeType.JSON);
-
-      case 'cadastrarPertencePerdido':
-        return ContentService.createTextOutput(JSON.stringify(cadastrarPertencePerdido(e.parameter)))
-          .setMimeType(ContentService.MimeType.JSON);
-
-      case 'atualizarPertencePerdido':
-        return ContentService.createTextOutput(JSON.stringify(atualizarPertencePerdido(e.parameter)))
-          .setMimeType(ContentService.MimeType.JSON);
-
-      case 'registrarContatoPertence':
-        return ContentService.createTextOutput(JSON.stringify(registrarContatoPertence(e.parameter)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case 'excluirPertencePerdido':
-        return ContentService.createTextOutput(JSON.stringify(excluirPertencePerdido(e.parameter)))
-          .setMimeType(ContentService.MimeType.JSON);
-
       case 'executarBackupSistema':
         return ContentService.createTextOutput(JSON.stringify(executarBackupSistema(e.parameter)))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'listarBackupsSistema':
+        return ContentService.createTextOutput(JSON.stringify(listarBackupsSistema()))
+          .setMimeType(ContentService.MimeType.JSON);
+
+      case 'detalharBackup':
+        return ContentService.createTextOutput(JSON.stringify(detalharBackup(e.parameter)))
           .setMimeType(ContentService.MimeType.JSON);
 
       default:
@@ -2207,6 +2234,18 @@ function getArmarios(tipo, incluirInternacoes, incluirTermos) {
             termoFinalizado = Boolean(termo.pdfUrl || (termo.assinaturas && termo.assinaturas.finalizadoEm) || statusTermo === 'finalizado');
           }
 
+          // Balde genérico: guarda o termo NÃO finalizado mais recente daquele armário,
+          // independente do número. Serve de fallback quando o número gravado no termo não
+          // bate com o número normalizado do armário em getArmariosFromSheet (o casamento por
+          // número era estrito demais e marcava "pendente" um termo já aplicado). Só guardamos
+          // termos não finalizados para nunca herdar um "finalizado" de um ocupante anterior.
+          if (!termoFinalizado) {
+            var termoGenericoAtual = termosMap[chaveId]['__qualquer_nao_finalizado__'];
+            if (!termoGenericoAtual || (Number(termo.id) || 0) > (Number(termoGenericoAtual.id) || 0)) {
+              termosMap[chaveId]['__qualquer_nao_finalizado__'] = termo;
+            }
+          }
+
           if (!termoAtual) {
             termosMap[chaveId][numeroChave] = termo;
             return;
@@ -2274,7 +2313,7 @@ function getArmariosFromSheet(sheetName, tipo, termosMap, mapaInternacoes) {
   var statusIndex = obterIndiceColuna(estrutura, 'status', 2);
   var nomeChaves = isVisitante ? CABECALHOS_NOME_VISITANTE : CABECALHOS_NOME_ACOMPANHANTE;
   var nomeIndex = obterIndiceColuna(estrutura, nomeChaves, 3);
-  var pacienteIndex = obterIndiceColuna(estrutura, 'nome paciente', 4);
+  var pacienteIndex = obterIndicePaciente(estrutura);
   var leitoIndex = obterIndiceColuna(estrutura, 'leito', 5);
   var volumesIndex = obterIndiceColuna(estrutura, 'volumes', 6);
   var horaInicioIndex = obterIndiceColuna(estrutura, 'hora inicio', 7);
@@ -2405,6 +2444,12 @@ function getArmariosFromSheet(sheetName, tipo, termosMap, mapaInternacoes) {
         termoRelacionado = termosPorId[chaveNumero] || null;
         if (!termoRelacionado && chaveNumero !== '__sem_numero__') {
           termoRelacionado = termosPorId['__sem_numero__'] || null;
+        }
+        // Fallback tolerante (mesma ideia do getTermo): se o número não casar, usa o termo
+        // não finalizado mais recente daquele armário. Evita o falso "Termo pendente" quando o
+        // número do termo diverge do número do armário.
+        if (!termoRelacionado) {
+          termoRelacionado = termosPorId['__qualquer_nao_finalizado__'] || null;
         }
       }
       if (termoRelacionado) {
@@ -2572,7 +2617,7 @@ function cadastrarArmario(armarioData) {
 
     definirValorLinha(novaLinha, estrutura, 'status', 'em-uso');
     definirValorLinha(novaLinha, estrutura, nomeChavesCadastro, armarioData.nomeVisitante);
-    definirValorLinha(novaLinha, estrutura, 'nome paciente', armarioData.nomePaciente);
+    definirNomePacienteLinha(novaLinha, estrutura, armarioData.nomePaciente);
     definirValorLinha(novaLinha, estrutura, 'prontuario', armarioData.prontuario || '');
     definirValorLinha(novaLinha, estrutura, 'leito', armarioData.leito);
     definirValorLinha(novaLinha, estrutura, 'volumes', volumes);
@@ -2751,7 +2796,7 @@ function registrarContingencia(dados) {
     definirValorLinha(linhaBase, estrutura, 'numero', numeroContingencia);
     definirValorLinha(linhaBase, estrutura, 'status', 'contingencia');
     definirValorLinha(linhaBase, estrutura, nomeChavesCadastro, dados.nomeAcompanhante || dados.nomeVisitante || '');
-    definirValorLinha(linhaBase, estrutura, 'nome paciente', dados.nomePaciente || '');
+    definirNomePacienteLinha(linhaBase, estrutura, dados.nomePaciente || '');
     definirValorLinha(linhaBase, estrutura, 'prontuario', dados.prontuario || '');
     definirValorLinha(linhaBase, estrutura, 'leito', dados.leito || '');
     definirValorLinha(linhaBase, estrutura, 'volumes', volumes);
@@ -2885,7 +2930,7 @@ function registrarContingenciaTermo(dados) {
     definirValorLinha(linhaBase, estrutura, 'numero', numeroContingencia);
     definirValorLinha(linhaBase, estrutura, 'status', 'contingencia');
     definirValorLinha(linhaBase, estrutura, CABECALHOS_NOME_ACOMPANHANTE, '');
-    definirValorLinha(linhaBase, estrutura, 'nome paciente', '');
+    definirNomePacienteLinha(linhaBase, estrutura, '');
     definirValorLinha(linhaBase, estrutura, 'prontuario', '');
     definirValorLinha(linhaBase, estrutura, 'leito', '');
     definirValorLinha(linhaBase, estrutura, 'volumes', 0);
@@ -3068,7 +3113,7 @@ function atualizarDadosArmario(parametros) {
     var numeroIndex = obterIndiceColuna(estrutura, 'numero', 1);
     var statusIndex = obterIndiceColuna(estrutura, 'status', 2);
     var nomeIndex = obterIndiceColuna(estrutura, sheetName === 'Visitantes' ? CABECALHOS_NOME_VISITANTE : CABECALHOS_NOME_ACOMPANHANTE, 3);
-    var pacienteIndex = obterIndiceColuna(estrutura, 'nome paciente', 4);
+    var pacienteIndex = obterIndicePaciente(estrutura);
     var leitoIndex = obterIndiceColuna(estrutura, 'leito', 5);
     var volumesIndex = obterIndiceColuna(estrutura, 'volumes', 6);
     var horaInicioIndex = obterIndiceColuna(estrutura, 'hora inicio', 7);
@@ -3133,7 +3178,7 @@ function atualizarDadosArmario(parametros) {
     var horaPrevista = sheetName === 'Visitantes' ? (visitaEstendida ? '' : (parametros.horaPrevista ? parametros.horaPrevista.toString().trim() : '')) : '';
 
     definirValorLinha(armarioData, estrutura, sheetName === 'Visitantes' ? CABECALHOS_NOME_VISITANTE : CABECALHOS_NOME_ACOMPANHANTE, nomeVisitante);
-    definirValorLinha(armarioData, estrutura, 'nome paciente', nomePaciente);
+    definirNomePacienteLinha(armarioData, estrutura, nomePaciente);
     definirValorLinha(armarioData, estrutura, 'prontuario', prontuario);
     definirValorLinha(armarioData, estrutura, 'leito', leito);
     definirValorLinha(armarioData, estrutura, 'volumes', volumes);
@@ -3322,7 +3367,8 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
 
     definirCampoComFallback('status', 'livre', statusIndex);
     definirValorLinha(novaLinha, estrutura, nomeColuna, '');
-    definirValorLinha(novaLinha, estrutura, 'nome paciente', '');
+    definirNomePacienteLinha(novaLinha, estrutura, '');
+    definirValorLinha(novaLinha, estrutura, 'prontuario', '');
     definirValorLinha(novaLinha, estrutura, 'leito', '');
     definirValorLinha(novaLinha, estrutura, 'volumes', '');
     definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -3337,7 +3383,7 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
     definirValorLinha(novaLinha, estrutura, 'termo aplicado', false);
     definirValorLinha(novaLinha, estrutura, CABECALHOS_OBSERVACOES, '');
 
-    sheet.getRange(linhaPlanilha, 1, 1, totalColunas).setValues([novaLinha]);
+    sheet.getRange(linhaPlanilha, 1, 1, novaLinha.length).setValues([novaLinha]);
 
     // Atualizar histórico - encontrar a entrada mais recente deste armário
     var historicoLastRow = historicoSheet.getLastRow();
@@ -3376,7 +3422,6 @@ function liberarArmario(id, tipo, numero, usuarioResponsavel) {
 
     registrarLog('LIBERAÇÃO', `Armário ${numeroArmario} liberado`);
 
-    SpreadsheetApp.flush();
     invalidarCachesArmariosRelacionados(sheetName);
 
     return { success: true, message: 'Armário liberado com sucesso' };
@@ -3403,7 +3448,7 @@ function getUsuarios() {
         return { success: true, data: [] };
       }
 
-      var estrutura = obterEstruturaPlanilha(sheet);
+      var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
       var totalColunas = estrutura.ultimaColuna || 10;
       var mapasUnidades = obterMapasUnidades();
       var dados = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
@@ -3430,6 +3475,7 @@ function getUsuarios() {
           id: id,
           nome: obterValorLinha(linha, estrutura, 'nome', ''),
           email: obterValorLinha(linha, estrutura, 'email', ''),
+          emailRecuperacao: obterValorLinhaFlexivel(linha, estrutura, CABECALHOS_EMAIL_RECUPERACAO, ''),
           perfil: perfil,
           acessoVisitantes: converterParaBoolean(obterValorLinha(linha, estrutura, 'acesso visitantes', false)),
           acessoAcompanhantes: converterParaBoolean(obterValorLinha(linha, estrutura, 'acesso acompanhantes', false)),
@@ -3459,6 +3505,7 @@ function cadastrarUsuario(dados) {
     var email = (dados.email || '').toString().trim();
     var perfil = (dados.perfil || '').toString().trim().toLowerCase();
     var senha = (dados.senha || '').toString().trim();
+    var emailRecuperacao = (dados.emailRecuperacao || '').toString().trim();
     var unidadesLista = normalizarListaUnidadesParametro(dados.unidades);
     var unidadesUnicas = [];
     var incluiTodas = false;
@@ -3489,6 +3536,15 @@ function cadastrarUsuario(dados) {
       return { success: false, error: 'Informe uma senha para o usuário' };
     }
 
+    var forcaSenhaCadastro = validarForcaSenha(senha);
+    if (!forcaSenhaCadastro.ok) {
+      return { success: false, error: forcaSenhaCadastro.error };
+    }
+
+    if (!validarFormatoEmail(emailRecuperacao)) {
+      return { success: false, error: 'Informe um e-mail de recuperação válido' };
+    }
+
     if (unidadesUnicas.length === 0 && perfil !== 'admin') {
       return { success: false, error: 'Informe ao menos uma unidade de acesso' };
     }
@@ -3504,7 +3560,7 @@ function cadastrarUsuario(dados) {
       return { success: false, error: 'Aba de usuários não encontrada' };
     }
 
-    var estrutura = obterEstruturaPlanilha(sheet);
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
     var totalColunas = estrutura.ultimaColuna || 10;
     var ultimaLinha = sheet.getLastRow();
     var idIndex = obterIndiceColuna(estrutura, 'id', 0);
@@ -3540,6 +3596,7 @@ function cadastrarUsuario(dados) {
     definirValorLinha(novaLinha, estrutura, 'data cadastro', dataCadastro);
     definirValorLinha(novaLinha, estrutura, 'status', 'ativo');
     definirValorLinha(novaLinha, estrutura, 'senha', criarHashSenha(senha));
+    definirValorLinhaFlexivel(novaLinha, estrutura, CABECALHOS_EMAIL_RECUPERACAO, emailRecuperacao);
     if (!definirValorLinhaFlexivel(novaLinha, estrutura, ['unidades', 'unidade', 'acesso unidades'], unidadesTexto)) {
       definirValorLinha(novaLinha, estrutura, 'unidades', unidadesTexto);
     }
@@ -3558,6 +3615,7 @@ function cadastrarUsuario(dados) {
         id: proximoId,
         nome: nome,
         email: email,
+        emailRecuperacao: emailRecuperacao,
         perfil: perfil,
         acessoVisitantes: acessoVisitantes,
         acessoAcompanhantes: acessoAcompanhantes,
@@ -3589,6 +3647,7 @@ function atualizarUsuario(dados) {
     var email = (dados.email || '').toString().trim();
     var perfil = (dados.perfil || '').toString().trim().toLowerCase();
     var senha = (dados.senha || '').toString().trim();
+    var emailRecuperacao = (dados.emailRecuperacao || '').toString().trim();
     var status = (dados.status || '').toString().trim().toLowerCase();
     var acessoVisitantes = converterParaBoolean(dados.acessoVisitantes);
     var acessoAcompanhantes = converterParaBoolean(dados.acessoAcompanhantes);
@@ -3618,8 +3677,15 @@ function atualizarUsuario(dados) {
       return { success: false, error: 'Nome, matrícula e perfil são obrigatórios' };
     }
 
-    if (!senha) {
-      return { success: false, error: 'Informe a senha do usuário' };
+    if (senha) {
+      var forcaSenhaAtualizar = validarForcaSenha(senha);
+      if (!forcaSenhaAtualizar.ok) {
+        return { success: false, error: forcaSenhaAtualizar.error };
+      }
+    }
+
+    if (!validarFormatoEmail(emailRecuperacao)) {
+      return { success: false, error: 'Informe um e-mail de recuperação válido' };
     }
 
     if (unidadesUnicas.length === 0 && perfil !== 'admin') {
@@ -3640,7 +3706,7 @@ function atualizarUsuario(dados) {
       return { success: false, error: 'Usuário não encontrado' };
     }
 
-    var estrutura = obterEstruturaPlanilha(sheet);
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
     var totalColunas = estrutura.ultimaColuna || 10;
     var idIndex = obterIndiceColuna(estrutura, 'id', 0);
     var ultimaLinha = sheet.getLastRow();
@@ -3657,7 +3723,10 @@ function atualizarUsuario(dados) {
         definirValorLinha(valores[i], estrutura, 'acesso visitantes', acessoVisitantes);
         definirValorLinha(valores[i], estrutura, 'acesso acompanhantes', acessoAcompanhantes);
         definirValorLinha(valores[i], estrutura, 'status', status);
-        definirValorLinha(valores[i], estrutura, 'senha', criarHashSenha(senha));
+        if (senha) {
+          definirValorLinha(valores[i], estrutura, 'senha', criarHashSenha(senha));
+        }
+        definirValorLinhaFlexivel(valores[i], estrutura, CABECALHOS_EMAIL_RECUPERACAO, emailRecuperacao);
         if (!definirValorLinhaFlexivel(valores[i], estrutura, ['unidades', 'unidade', 'acesso unidades'], unidadesTexto)) {
           definirValorLinha(valores[i], estrutura, 'unidades', unidadesTexto);
         }
@@ -3683,6 +3752,7 @@ function atualizarUsuario(dados) {
         id: id,
         nome: nome,
         email: email,
+        emailRecuperacao: emailRecuperacao,
         perfil: perfil,
         acessoVisitantes: acessoVisitantes,
         acessoAcompanhantes: acessoAcompanhantes,
@@ -3768,7 +3838,7 @@ function autenticarUsuario(dados) {
       return { success: false, error: 'Nenhum usuário cadastrado' };
     }
 
-    var estrutura = obterEstruturaPlanilha(sheet);
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
     var totalColunas = estrutura.ultimaColuna || 10;
     var mapasUnidades = obterMapasUnidades();
     var dadosUsuarios = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
@@ -3803,13 +3873,13 @@ function autenticarUsuario(dados) {
 
     if (!linhaUsuario) {
       registrarFalhaLogin(login);
-      return { success: false, error: 'Usuário não encontrado' };
+      return { success: false, error: MENSAGEM_LOGIN_INVALIDO };
     }
 
     var status = obterValorLinha(linhaUsuario, estrutura, 'status', '');
     if (normalizarTextoBasico(status) !== 'ativo') {
       registrarFalhaLogin(login);
-      return { success: false, error: 'Usuário inativo' };
+      return { success: false, error: MENSAGEM_LOGIN_INVALIDO };
     }
 
     var senhaArmazenada = obterValorLinha(linhaUsuario, estrutura, 'senha', '');
@@ -3821,7 +3891,7 @@ function autenticarUsuario(dados) {
 
     if (!validarSenha(senhaInformada, senhaArmazenada)) {
       registrarFalhaLogin(login);
-      return { success: false, error: 'Senha incorreta' };
+      return { success: false, error: MENSAGEM_LOGIN_INVALIDO };
     }
 
     if (!senhaEhHashValido(senhaArmazenada)) {
@@ -3860,6 +3930,222 @@ function autenticarUsuario(dados) {
 
   } catch (error) {
     registrarLog('ERRO', 'Erro ao autenticar usuário: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+function alterarMinhaSenha(dados) {
+  try {
+    var id = parseInt(dados && dados.usuarioId, 10);
+    if (!id) {
+      return { success: false, error: 'Sessão inválida. Faça login novamente.' };
+    }
+    var senhaAtual = ((dados && dados.senhaAtual) || '').toString().trim();
+    var novaSenha = ((dados && dados.novaSenha) || '').toString().trim();
+    var confirmarSenha = ((dados && dados.confirmarSenha) || '').toString().trim();
+
+    if (!senhaAtual || !novaSenha || !confirmarSenha) {
+      return { success: false, error: 'Preencha a senha atual e a nova senha' };
+    }
+    if (novaSenha !== confirmarSenha) {
+      return { success: false, error: 'A confirmação de senha não coincide' };
+    }
+    var forca = validarForcaSenha(novaSenha);
+    if (!forca.ok) {
+      return { success: false, error: forca.error };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: false, error: 'Usuário não encontrado' };
+    }
+    var estrutura = obterEstruturaPlanilha(sheet);
+    var totalColunas = estrutura.ultimaColuna || 10;
+    var idIndex = obterIndiceColuna(estrutura, 'id', 0);
+    var ultimaLinha = sheet.getLastRow();
+    var faixa = sheet.getRange(2, 1, ultimaLinha - 1, totalColunas);
+    var valores = faixa.getValues();
+
+    for (var i = 0; i < valores.length; i++) {
+      if (parseInt(valores[i][idIndex], 10) === id) {
+        var senhaArmazenada = (obterValorLinha(valores[i], estrutura, 'senha', '') || '').toString().trim();
+        if (!validarSenha(senhaAtual, senhaArmazenada)) {
+          return { success: false, error: 'Senha atual incorreta' };
+        }
+        definirValorLinha(valores[i], estrutura, 'senha', criarHashSenha(novaSenha));
+        faixa.setValues(valores);
+        registrarLog('ALTERAR SENHA', 'Usuário id ' + id + ' alterou a própria senha');
+        limparCacheUsuarios();
+        return { success: true, message: 'Senha alterada com sucesso' };
+      }
+    }
+    return { success: false, error: 'Usuário não encontrado' };
+  } catch (error) {
+    registrarLog('ERRO', 'Erro ao alterar senha: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+function obterChaveCodigoResetSenha(login) {
+  return 'reset_codigo:' + normalizarTextoBasico(login);
+}
+
+function obterChaveTentativasResetSenha(login) {
+  return 'reset_tentativas:' + normalizarTextoBasico(login);
+}
+
+function obterChaveBloqueioResetSenha(login) {
+  return 'reset_bloqueio:' + normalizarTextoBasico(login);
+}
+
+function gerarCodigoResetSenha() {
+  var min = Math.pow(10, TAMANHO_CODIGO_RESET_SENHA - 1);
+  var max = Math.pow(10, TAMANHO_CODIGO_RESET_SENHA) - 1;
+  return String(Math.floor(min + Math.random() * (max - min + 1)));
+}
+
+function solicitarResetSenha(dados) {
+  var mensagemGenerica = 'Se o usuário existir e tiver e-mail de recuperação cadastrado, enviaremos um código.';
+  try {
+    var login = ((dados && (dados.usuario || dados.matricula || dados.login)) || '').toString().trim();
+    if (!login) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var cache = obterCacheLogin();
+    if (cache.get(obterChaveBloqueioResetSenha(login)) === '1') {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var estrutura = garantirColunaEmailRecuperacao(sheet, obterEstruturaPlanilha(sheet));
+    var totalColunas = estrutura.ultimaColuna || 10;
+    var valores = sheet.getRange(2, 1, sheet.getLastRow() - 1, totalColunas).getValues();
+    var alvoNormalizado = normalizarTextoBasico(login);
+    var linhaEncontrada = null;
+
+    for (var i = 0; i < valores.length; i++) {
+      var linha = valores[i];
+      var identificadores = ['usuario', 'nome', 'matricula', 'email'].map(function(chave) {
+        return ((obterValorLinha(linha, estrutura, chave, '')) || '').toString().trim();
+      });
+      var encontrou = identificadores.some(function(valor) {
+        return normalizarTextoBasico(valor) === alvoNormalizado;
+      });
+      if (encontrou) {
+        linhaEncontrada = linha;
+        break;
+      }
+    }
+
+    if (!linhaEncontrada) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var status = ((obterValorLinha(linhaEncontrada, estrutura, 'status', '')) || '').toString();
+    var emailRecuperacao = ((obterValorLinhaFlexivel(linhaEncontrada, estrutura, CABECALHOS_EMAIL_RECUPERACAO, '')) || '').toString().trim();
+
+    if (normalizarTextoBasico(status) !== 'ativo' || !emailRecuperacao) {
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var chaveTentativas = obterChaveTentativasResetSenha(login);
+    var tentativasAtuais = parseInt(cache.get(chaveTentativas) || '0', 10) + 1;
+    cache.put(chaveTentativas, tentativasAtuais.toString(), BLOQUEIO_RESET_SENHA_MINUTOS * 60);
+    if (tentativasAtuais > MAX_TENTATIVAS_RESET_SENHA) {
+      cache.put(obterChaveBloqueioResetSenha(login), '1', BLOQUEIO_RESET_SENHA_MINUTOS * 60);
+      return { success: true, message: mensagemGenerica };
+    }
+
+    var codigo = gerarCodigoResetSenha();
+    cache.put(obterChaveCodigoResetSenha(login), codigo, VALIDADE_CODIGO_RESET_SENHA_MINUTOS * 60);
+
+    MailApp.sendEmail({
+      to: emailRecuperacao,
+      subject: 'Código de recuperação de senha - Cosign',
+      body: 'Seu código de verificação é: ' + codigo + '\n\nEle expira em ' + VALIDADE_CODIGO_RESET_SENHA_MINUTOS + ' minutos.\n\nSe você não solicitou este código, ignore este e-mail.'
+    });
+
+    registrarLog('SOLICITAR RESET SENHA', 'Código enviado para usuário ' + login);
+    return { success: true, message: mensagemGenerica };
+  } catch (error) {
+    registrarLog('ERRO', 'Erro ao solicitar reset de senha: ' + error.toString());
+    return { success: true, message: mensagemGenerica };
+  }
+}
+
+function confirmarResetSenha(dados) {
+  try {
+    var login = ((dados && (dados.usuario || dados.matricula || dados.login)) || '').toString().trim();
+    var codigo = ((dados && dados.codigo) || '').toString().trim();
+    var novaSenha = ((dados && dados.novaSenha) || '').toString().trim();
+    var confirmarSenha = ((dados && dados.confirmarSenha) || '').toString().trim();
+
+    if (!login || !codigo || !novaSenha || !confirmarSenha) {
+      return { success: false, error: 'Preencha todos os campos' };
+    }
+    if (novaSenha !== confirmarSenha) {
+      return { success: false, error: 'A confirmação de senha não coincide' };
+    }
+    var forca = validarForcaSenha(novaSenha);
+    if (!forca.ok) {
+      return { success: false, error: forca.error };
+    }
+
+    var cache = obterCacheLogin();
+    var codigoArmazenado = cache.get(obterChaveCodigoResetSenha(login));
+    if (!codigoArmazenado || codigoArmazenado !== codigo) {
+      return { success: false, error: 'Código inválido ou expirado' };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Usuários');
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { success: false, error: 'Usuário não encontrado' };
+    }
+    var estrutura = obterEstruturaPlanilha(sheet);
+    var totalColunas = estrutura.ultimaColuna || 10;
+    var ultimaLinha = sheet.getLastRow();
+    var faixa = sheet.getRange(2, 1, ultimaLinha - 1, totalColunas);
+    var valores = faixa.getValues();
+    var alvoNormalizado = normalizarTextoBasico(login);
+    var encontrado = false;
+
+    for (var i = 0; i < valores.length; i++) {
+      var linha = valores[i];
+      var identificadores = ['usuario', 'nome', 'matricula', 'email'].map(function(chave) {
+        return ((obterValorLinha(linha, estrutura, chave, '')) || '').toString().trim();
+      });
+      var encontrou = identificadores.some(function(valor) {
+        return normalizarTextoBasico(valor) === alvoNormalizado;
+      });
+      if (encontrou) {
+        definirValorLinha(linha, estrutura, 'senha', criarHashSenha(novaSenha));
+        encontrado = true;
+        break;
+      }
+    }
+
+    if (!encontrado) {
+      return { success: false, error: 'Código inválido ou expirado' };
+    }
+
+    faixa.setValues(valores);
+    cache.remove(obterChaveCodigoResetSenha(login));
+    cache.remove(obterChaveTentativasResetSenha(login));
+    limparTentativasLogin(login);
+    limparCacheUsuarios();
+    registrarLog('CONFIRMAR RESET SENHA', 'Senha redefinida via código para usuário ' + login);
+
+    return { success: true, message: 'Senha redefinida com sucesso' };
+  } catch (error) {
+    registrarLog('ERRO', 'Erro ao confirmar reset de senha: ' + error.toString());
     return { success: false, error: error.toString() };
   }
 }
@@ -3992,208 +4278,6 @@ function montarHistoricoTermosResponsabilidade() {
   });
 
   return { success: true, data: historico.reverse() };
-}
-
-function getPlanilhaLiberacao(parametros) {
-  var timezone = obterTimeZoneAplicacao();
-
-  try {
-    var params = parametros || {};
-    var pacienteFiltroTexto = params.paciente !== undefined && params.paciente !== null
-      ? params.paciente.toString().trim()
-      : '';
-    var prontuarioFiltroTexto = params.prontuario !== undefined && params.prontuario !== null
-      ? params.prontuario.toString().trim()
-      : '';
-
-    var dataInicioParametro = params.dataInicio !== undefined ? params.dataInicio : params.data;
-    var dataFimParametro = params.dataFim !== undefined ? params.dataFim : params.data;
-
-    var dataInicio = interpretarDataParametroSeguro(dataInicioParametro, timezone);
-    var dataFim = interpretarDataParametroSeguro(dataFimParametro, timezone);
-
-    var pacienteFiltroNormalizado = normalizarTextoBasico(pacienteFiltroTexto);
-    var prontuarioFiltroNormalizado = normalizarTextoBasico(prontuarioFiltroTexto);
-    var tokensPacienteFiltro = pacienteFiltroNormalizado
-      ? pacienteFiltroNormalizado.split(/\s+/).filter(function(token) { return token; })
-      : [];
-    var tokensProntuarioFiltro = prontuarioFiltroNormalizado
-      ? prontuarioFiltroNormalizado.split(/\s+/).filter(function(token) { return token; })
-      : [];
-
-    var filtroTextoAtivo = tokensPacienteFiltro.length > 0 || tokensProntuarioFiltro.length > 0;
-    var aplicarFiltroData = !filtroTextoAtivo;
-
-    if (aplicarFiltroData) {
-      if (dataInicio && !dataFim) {
-        dataFim = dataInicio;
-      }
-      if (dataFim && !dataInicio) {
-        dataInicio = dataFim;
-      }
-
-      if (!dataInicio && !dataFim) {
-        var dataPadrao = obterDataAtualNormalizada(timezone);
-        dataInicio = dataPadrao;
-        dataFim = dataPadrao;
-      }
-
-      if (!dataInicio || !dataFim) {
-        return { success: false, error: 'Informe um período válido para realizar a busca.' };
-      }
-
-      if (dataInicio.getTime() > dataFim.getTime()) {
-        var temp = dataInicio;
-        dataInicio = dataFim;
-        dataFim = temp;
-      }
-    }
-
-    var chaveInicio = aplicarFiltroData ? gerarChaveDataComparacao(dataInicio, timezone) : null;
-    var chaveFim = aplicarFiltroData ? gerarChaveDataComparacao(dataFim, timezone) : null;
-
-    if (aplicarFiltroData && (!chaveInicio || !chaveFim)) {
-      return { success: false, error: 'Informe um período válido para realizar a busca.' };
-    }
-
-    function contemTodosTokens(textoNormalizado, tokens) {
-      if (!tokens.length) {
-        return true;
-      }
-      if (!textoNormalizado) {
-        return false;
-      }
-      for (var i = 0; i < tokens.length; i++) {
-        if (textoNormalizado.indexOf(tokens[i]) === -1) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    var spreadsheet;
-    try {
-      spreadsheet = SpreadsheetApp.openById(PLANILHA_LIBERACAO_ID);
-    } catch (erroAcesso) {
-      registrarLog('ERRO', 'Falha ao acessar planilha de liberações: ' + erroAcesso.toString());
-      return { success: false, error: 'Não foi possível acessar a planilha de liberações.' };
-    }
-
-    if (!spreadsheet) {
-      return { success: false, error: 'Planilha de liberações não encontrada.' };
-    }
-
-    var sheet = spreadsheet.getSheetByName(PLANILHA_LIBERACAO_ABA);
-    if (!sheet) {
-      return { success: false, error: 'Aba de liberações não encontrada.' };
-    }
-
-    var totalColunas = Math.max(sheet.getLastColumn(), 7);
-    var cabecalhos = sheet.getRange(PLANILHA_LIBERACAO_LINHA_CABECALHO, 1, 1, totalColunas).getDisplayValues()[0] || [];
-    cabecalhos = cabecalhos.map(function(valor) {
-      return valor === null || valor === undefined ? '' : valor;
-    });
-    var cabecalhosNormalizados = cabecalhos.map(function(valor) {
-      return normalizarTextoBasico(valor);
-    });
-
-    function encontrarIndiceCabecalhoFlexivel(lista, termos) {
-      if (!Array.isArray(lista)) {
-        return -1;
-      }
-      var candidatos = Array.isArray(termos) ? termos : [termos];
-      for (var i = 0; i < lista.length; i++) {
-        var cabecalhoNormalizado = lista[i] || '';
-        for (var j = 0; j < candidatos.length; j++) {
-          var termoNormalizado = normalizarTextoBasico(candidatos[j]);
-          if (!termoNormalizado) {
-            continue;
-          }
-          if (cabecalhoNormalizado === termoNormalizado || cabecalhoNormalizado.indexOf(termoNormalizado) !== -1) {
-            return i;
-          }
-        }
-      }
-      return -1;
-    }
-
-    var indicePaciente = encontrarIndiceCabecalhoFlexivel(cabecalhosNormalizados, ['paciente']);
-    var indiceProntuario = encontrarIndiceCabecalhoFlexivel(cabecalhosNormalizados, ['prontuario']);
-
-    var totalLinhasDados = Math.max(sheet.getLastRow() - PLANILHA_LIBERACAO_LINHA_CABECALHO, 0);
-    var linhasFiltradas = [];
-    var totalPlanilha = totalLinhasDados;
-
-    if (totalLinhasDados > 0) {
-      var rangeDados = sheet.getRange(PLANILHA_LIBERACAO_LINHA_CABECALHO + 1, 1, totalLinhasDados, totalColunas);
-      var valoresBrutos = rangeDados.getValues();
-      var valoresFormatados = rangeDados.getDisplayValues();
-
-      for (var i = 0; i < valoresBrutos.length; i++) {
-        var linhaBruta = valoresBrutos[i];
-        var linhaExibicao = valoresFormatados[i];
-        var possuiConteudo = linhaExibicao.some(function(celula) {
-          return celula !== null && celula !== undefined && String(celula).trim() !== '';
-        });
-
-        if (!possuiConteudo) {
-          continue;
-        }
-
-        var valorData = linhaBruta[PLANILHA_LIBERACAO_COLUNA_DATA - 1];
-        var exibicaoData = linhaExibicao[PLANILHA_LIBERACAO_COLUNA_DATA - 1];
-        var dataLinha = extrairDataValidaDaCelula(valorData, exibicaoData, timezone);
-        var chaveLinha = gerarChaveDataComparacao(dataLinha, timezone);
-
-        if (aplicarFiltroData) {
-          if (!chaveLinha || chaveLinha < chaveInicio || chaveLinha > chaveFim) {
-            continue;
-          }
-        }
-
-        var valorPaciente = indicePaciente >= 0 && indicePaciente < linhaExibicao.length
-          ? linhaExibicao[indicePaciente]
-          : '';
-        var valorProntuario = indiceProntuario >= 0 && indiceProntuario < linhaExibicao.length
-          ? linhaExibicao[indiceProntuario]
-          : '';
-
-        var pacienteNormalizadoLinha = normalizarTextoBasico(valorPaciente);
-        if (!contemTodosTokens(pacienteNormalizadoLinha, tokensPacienteFiltro)) {
-          continue;
-        }
-
-        var prontuarioNormalizadoLinha = normalizarTextoBasico(valorProntuario);
-        if (!contemTodosTokens(prontuarioNormalizadoLinha, tokensProntuarioFiltro)) {
-          continue;
-        }
-
-        linhasFiltradas.push(linhaExibicao.map(function(celula) {
-          return celula === null || celula === undefined ? '' : celula;
-        }));
-      }
-    }
-
-    return {
-      success: true,
-      columns: cabecalhos,
-      rows: linhasFiltradas,
-      filtro: {
-        dataInicio: dataInicio ? Utilities.formatDate(dataInicio, timezone, 'yyyy-MM-dd') : '',
-        dataFim: dataFim ? Utilities.formatDate(dataFim, timezone, 'yyyy-MM-dd') : '',
-        dataInicioFormatada: dataInicio ? Utilities.formatDate(dataInicio, timezone, 'dd/MM/yyyy') : '',
-        dataFimFormatada: dataFim ? Utilities.formatDate(dataFim, timezone, 'dd/MM/yyyy') : '',
-        paciente: pacienteFiltroTexto,
-        prontuario: prontuarioFiltroTexto
-      },
-      totalPlanilha: totalPlanilha,
-      totalFiltrado: linhasFiltradas.length
-    };
-
-  } catch (erro) {
-    registrarLog('ERRO', 'Erro ao buscar dados de liberação: ' + erro.toString());
-    return { success: false, error: 'Erro ao buscar dados de liberação.' };
-  }
 }
 
 // Funções para Cadastro de Armários Físicos
@@ -4341,7 +4425,7 @@ function criarArmariosUso(armarios) {
         definirValorLinha(novaLinha, estrutura, 'numero', armario[1]);
         definirValorLinha(novaLinha, estrutura, 'status', 'livre');
         definirValorLinha(novaLinha, estrutura, nomeChavesCadastro, '');
-        definirValorLinha(novaLinha, estrutura, 'nome paciente', '');
+        definirNomePacienteLinha(novaLinha, estrutura, '');
         definirValorLinha(novaLinha, estrutura, 'leito', '');
         definirValorLinha(novaLinha, estrutura, 'volumes', 0);
         definirValorLinha(novaLinha, estrutura, 'hora inicio', '');
@@ -4903,10 +4987,18 @@ function salvarTermoCompleto(dadosTermo) {
 
     if (sheetAcompanhantes) {
       estruturaAcompanhantes = obterEstruturaPlanilha(sheetAcompanhantes);
+      // Garante a coluna de prontuário ANTES de ler/gravar. O schema padrão
+      // da aba Acompanhantes não tem essa coluna, e esta função (cadastro do
+      // acompanhante via termo) era a única que gravava o prontuário sem
+      // garantir a coluna — a escrita era descartada e o número sumia depois
+      // de salvar. Chamando garantir aqui, a leitura (getDataRange abaixo) e a
+      // gravação passam a enxergar a mesma coluna. Feito antes do getDataRange
+      // para que as linhas lidas já incluam a coluna recém-criada.
+      estruturaAcompanhantes = garantirColunaProntuario(sheetAcompanhantes, estruturaAcompanhantes);
       dadosAcompanhantes = sheetAcompanhantes.getDataRange().getValues();
       for (var indiceA = 1; indiceA < dadosAcompanhantes.length; indiceA++) {
         var linha = dadosAcompanhantes[indiceA];
-        if (linha && linha[0] == dadosTermo.armarioId) {
+        if (linha && (linha[0] == dadosTermo.armarioId || linha[0] == normalizarIdentificador(dadosTermo.armarioId))) {
           linhaAcompanhante = indiceA;
           if (linha.length > 1 && linha[1]) {
             numeroArmarioOficial = linha[1];
@@ -5007,15 +5099,6 @@ function salvarTermoCompleto(dadosTermo) {
     ];
 
     sheet.getRange(linhaExistente, 1, 1, linhaDados.length).setValues([linhaDados]);
-    SpreadsheetApp.flush();
-
-    // Confirmação rápida de persistência para evitar falsos positivos no front-end
-    var linhaGravada = sheet.getRange(linhaExistente, 1, 1, 3).getValues();
-    var idGravado = linhaGravada && linhaGravada[0] ? linhaGravada[0][0] : '';
-    var armarioGravado = linhaGravada && linhaGravada[0] ? linhaGravada[0][1] : '';
-    if (String(idGravado) !== String(termoId) || String(armarioGravado) !== String(dadosTermo.armarioId || '')) {
-      throw new Error('Falha ao confirmar o salvamento do termo. Tente novamente.');
-    }
 
     // 2. Atualizar status do armário na aba "Acompanhantes"
     var cadastroArmario = dadosTermo.cadastroArmario;
@@ -5066,9 +5149,9 @@ function salvarTermoCompleto(dadosTermo) {
       var whatsappCadastro = dadosCadastroAcompanhante.whatsapp ? dadosCadastroAcompanhante.whatsapp.toString().trim() : '';
       var nomeColunaCadastro = CABECALHOS_NOME_ACOMPANHANTE;
 
-      definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', 'em-uso');
+      definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'status', 'EM USO');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, nomeColunaCadastro, dadosCadastroAcompanhante.nomeVisitante || dadosTermo.acompanhante || '');
-      definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'nome paciente', dadosCadastroAcompanhante.nomePaciente || dadosTermo.paciente || '');
+      definirNomePacienteLinha(linhaAtualizada, estruturaAcompanhantes, dadosCadastroAcompanhante.nomePaciente || dadosTermo.paciente || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'prontuario', dadosCadastroAcompanhante.prontuario || dadosTermo.prontuario || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'leito', dadosCadastroAcompanhante.leito || dadosTermo.leito || '');
       definirValorLinha(linhaAtualizada, estruturaAcompanhantes, 'hora inicio', horaInicioCadastro);
@@ -5103,7 +5186,7 @@ function salvarTermoCompleto(dadosTermo) {
         historicoSheet.getRange(historicoLastRow + 1, 1, 1, historicoLinha.length).setValues([historicoLinha]);
       }
 
-      sheetAcompanhantes.getRange(linhaAcompanhante + 1, 1, 1, totalColunasAcompanhantes).setValues([linhaAtualizada]);
+      sheetAcompanhantes.getRange(linhaAcompanhante + 1, 1, 1, linhaAtualizada.length).setValues([linhaAtualizada]);
     }
 
     limparCacheTermos();
@@ -5321,14 +5404,13 @@ function obterTermosRegistrados() {
 
 function getTermo(dados) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('Termos de Responsabilidade');
+    var registrados = obterTermosRegistrados();
+    var termosCarregados = registrados.termos;
 
-    if (!sheet || sheet.getLastRow() < 2) {
+    if (!termosCarregados || !termosCarregados.length) {
       return { success: false, error: 'Termo não encontrado' };
     }
-    
-    var data = sheet.getDataRange().getValues();
+
     var termo = null;
     var termoFinalizadoMaisRecente = null;
     var armarioIdInformado = dados.armarioId !== null && dados.armarioId !== undefined
@@ -5337,54 +5419,43 @@ function getTermo(dados) {
     var numeroInformado = normalizarNumeroArmario(dados.numeroArmario);
     var incluirFinalizados = converterParaBoolean(dados.incluirFinalizados);
 
-    for (var i = data.length - 1; i >= 1; i--) {
-      var idLinha = data[i][1];
-      var idLinhaTexto = idLinha !== null && idLinha !== undefined ? idLinha.toString().trim() : '';
+    for (var i = termosCarregados.length - 1; i >= 0; i--) {
+      var termoLinha = termosCarregados[i];
+      var idLinhaTexto = termoLinha.armarioId !== null && termoLinha.armarioId !== undefined
+        ? termoLinha.armarioId.toString().trim()
+        : '';
       if (armarioIdInformado && idLinhaTexto !== armarioIdInformado) {
         continue;
       }
 
-      var numeroLinha = data[i][2] ? data[i][2].toString().trim() : '';
+      var numeroLinha = termoLinha.numeroArmario || '';
       var numeroLinhaNormalizado = normalizarNumeroArmario(numeroLinha);
       if (numeroInformado && numeroLinhaNormalizado !== numeroInformado) {
         continue;
       }
 
-      var assinaturas = normalizarAssinaturas(data[i][18]);
-      var orientacoesSalvas = data[i][13] ? data[i][13].split(',').filter(String) : [];
-      var volumesSalvos = [];
-      if (data[i][14]) {
-        try {
-          volumesSalvos = JSON.parse(data[i][14]);
-        } catch (erroVolumes) {
-          volumesSalvos = [];
-        }
-      }
-
-      var statusBruto = data[i][19] || '';
-      var statusNormalizado = normalizarTextoBasico(statusBruto);
-      var possuiPdf = Boolean(data[i][17]);
-      var termoFinalizado = Boolean(possuiPdf || statusNormalizado === 'finalizado' || (assinaturas && assinaturas.finalizadoEm));
+      var assinaturas = termoLinha.assinaturas || normalizarAssinaturas('');
+      var termoFinalizado = Boolean(termoLinha.finalizado);
 
       var termoAtual = {
-        id: data[i][0],
-        armarioId: data[i][1],
+        id: termoLinha.id,
+        armarioId: termoLinha.armarioId,
         numeroArmario: numeroLinha,
-        paciente: data[i][3],
-        prontuario: data[i][4],
-        nascimento: data[i][5],
-        setor: data[i][6],
-        leito: data[i][7],
-        consciente: data[i][8],
-        acompanhante: data[i][9],
-        telefone: data[i][10],
-        documento: data[i][11],
-        parentesco: data[i][12],
-        orientacoes: orientacoesSalvas,
-        volumes: Array.isArray(volumesSalvos) ? volumesSalvos : [],
-        descricaoVolumes: data[i][15],
-        aplicadoEm: data[i][16],
-        pdfUrl: data[i][17],
+        paciente: termoLinha.paciente,
+        prontuario: termoLinha.prontuario,
+        nascimento: termoLinha.nascimento,
+        setor: termoLinha.setor,
+        leito: termoLinha.leito,
+        consciente: termoLinha.consciente,
+        acompanhante: termoLinha.acompanhante,
+        telefone: termoLinha.telefone,
+        documento: termoLinha.documento,
+        parentesco: termoLinha.parentesco,
+        orientacoes: termoLinha.orientacoes,
+        volumes: Array.isArray(termoLinha.volumes) ? termoLinha.volumes : [],
+        descricaoVolumes: termoLinha.descricaoVolumes,
+        aplicadoEm: termoLinha.aplicadoEm,
+        pdfUrl: termoLinha.pdfUrl,
         assinaturaBase64: assinaturas.inicial,
         assinaturaMimeInicial: assinaturas.mimeInicial || 'image/png',
         assinaturaMimeFinal: assinaturas.mimeFinal || 'image/png',
@@ -5392,8 +5463,8 @@ function getTermo(dados) {
         finalizadoEm: assinaturas.finalizadoEm,
         metodoFinal: assinaturas.metodoFinal,
         cpfConfirmacao: assinaturas.cpfFinal,
-        status: statusBruto,
-        statusNormalizado: statusNormalizado,
+        status: termoLinha.status,
+        statusNormalizado: termoLinha.statusNormalizado,
         finalizado: termoFinalizado
       };
 
@@ -6714,6 +6785,27 @@ function garantirColunaProntuario(sheet, estrutura) {
   return obterEstruturaPlanilha(sheet);
 }
 
+var CABECALHOS_EMAIL_RECUPERACAO = ['email recuperacao', 'email recuperação', 'e-mail recuperacao', 'e-mail recuperação'];
+
+function garantirColunaEmailRecuperacao(sheet, estrutura) {
+  if (!sheet) {
+    return estrutura;
+  }
+
+  var estruturaAtual = estrutura || obterEstruturaPlanilha(sheet);
+  var indiceExistente = obterIndiceColuna(estruturaAtual, CABECALHOS_EMAIL_RECUPERACAO, null);
+
+  if (indiceExistente !== null && indiceExistente !== undefined) {
+    return estruturaAtual;
+  }
+
+  var ultimaColuna = estruturaAtual.ultimaColuna || sheet.getLastColumn();
+  sheet.insertColumnAfter(ultimaColuna);
+  sheet.getRange(1, ultimaColuna + 1).setValue('Email Recuperação');
+
+  return obterEstruturaPlanilha(sheet);
+}
+
 function garantirColunaObservacoesAcompanhantes(sheet, estrutura) {
   if (!sheet) {
     return estrutura;
@@ -7024,7 +7116,7 @@ function salvarMovimentacao(dados) {
     var tipoNormalizado = normalizarTextoBasico(dados.tipo);
     var numeroArmario = normalizarNumeroArmario(dados.numeroArmario);
     if (!numeroArmario) {
-      var nomeSheetArmario = tipoNormalizado === 'visitante' ? 'Visitantes' : 'Acompanhantes';
+      var nomeSheetArmario = tipoArmarioNormalizado === 'visitante' ? 'Visitantes' : 'Acompanhantes';
       var armarioSheet = ss.getSheetByName(nomeSheetArmario);
       if (armarioSheet) {
         var estruturaArmario = obterEstruturaPlanilha(armarioSheet);
@@ -7266,247 +7358,6 @@ function finalizarMovimentacoesArmario(armarioId, numeroArmario, tipo) {
 }
 
 // Funções para LOGS
-// Achados e Perdidos - Pertences em guarda-volume
-function obterSheetPertencesPerdidos() {
-  var spreadsheet = SpreadsheetApp.openById(PLANILHA_PERTENCES_PERDIDOS_ID);
-  var sheet = spreadsheet.getSheetByName(PLANILHA_PERTENCES_PERDIDOS_ABA);
-  if (!sheet) {
-    throw new Error('Aba de pertences perdidos não encontrada.');
-  }
-  return sheet;
-}
-
-function garantirEstruturaPertences(sheet) {
-  var headersObrigatorios = [
-    'DONO DO PERTENCE',
-    'DATA DA GUARDA',
-    'DESCRIÇÃO',
-    'TELEFONE PARA CONTATO',
-    'FOI ENCONTRADO?',
-    'HISTÓRICO DE CONTATO'
-  ];
-
-  var totalColunasExistentes = Math.max(sheet.getLastColumn() - PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL + 1, headersObrigatorios.length);
-  var cabecalhosRange = sheet.getRange(PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO, PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL, 1, totalColunasExistentes);
-  var cabecalhos = cabecalhosRange.getValues()[0];
-
-  var alterado = false;
-  headersObrigatorios.forEach(function(nome, indice) {
-    if (!cabecalhos[indice]) {
-      cabecalhos[indice] = nome;
-      alterado = true;
-    }
-  });
-
-  if (alterado) {
-    cabecalhosRange.setValues([cabecalhos]);
-  }
-
-  var estrutura = {
-    ultimaColuna: totalColunasExistentes,
-    mapaIndices: {}
-  };
-
-  cabecalhos.forEach(function(cabecalho, indice) {
-    var chave = normalizarTextoBasico(cabecalho);
-    if (chave && estrutura.mapaIndices[chave] === undefined) {
-      estrutura.mapaIndices[chave] = indice;
-    }
-  });
-
-  return estrutura;
-}
-
-function listarPertencesPerdidos() {
-  try {
-    var sheet = obterSheetPertencesPerdidos();
-    var estrutura = garantirEstruturaPertences(sheet);
-
-    var totalLinhasDados = Math.max(sheet.getLastRow() - PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO, 0);
-    if (totalLinhasDados <= 0) {
-      return { success: true, dados: [] };
-    }
-
-    var rangeValores = sheet.getRange(
-      PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO + 1,
-      PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL,
-      totalLinhasDados,
-      estrutura.ultimaColuna
-    );
-
-    var valores = rangeValores.getValues();
-    var exibicoes = rangeValores.getDisplayValues();
-
-    var itens = valores.map(function(linha, indice) {
-      var linhaExibicao = exibicoes[indice] || [];
-      var linhaPlanilha = PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO + 1 + indice;
-
-      var dono = obterValorLinhaFlexivel(linha, estrutura, ['dono do pertence', 'dono'], '');
-      var dataGuardaValor = obterValorLinhaFlexivel(linha, estrutura, ['data da guarda', 'data'], '');
-      var dataGuardaTexto = obterValorLinhaFlexivel(linhaExibicao, estrutura, ['data da guarda', 'data'], '');
-      var descricao = obterValorLinhaFlexivel(linha, estrutura, ['descrição', 'descricao'], '');
-      var telefone = obterValorLinhaFlexivel(linha, estrutura, ['telefone para contato', 'telefone'], '');
-      var encontradoTexto = obterValorLinhaFlexivel(linhaExibicao, estrutura, ['foi encontrado?', 'encontrado'], '');
-      var historicoContato = obterValorLinhaFlexivel(linha, estrutura, ['histórico de contato', 'historico de contato', 'historico'], '');
-
-      var encontradoNormalizado = normalizarTextoBasico(encontradoTexto);
-      var encontrado = encontradoNormalizado === 'sim' || encontradoNormalizado === 'true';
-
-      return {
-        idLinha: linhaPlanilha,
-        dono: dono,
-        dataGuarda: dataGuardaValor,
-        dataGuardaTexto: dataGuardaTexto,
-        descricao: descricao,
-        telefone: telefone,
-        encontrado: encontrado,
-        encontradoTexto: encontrado ? 'Sim' : 'Não',
-        historicoContato: historicoContato || ''
-      };
-    });
-
-    return { success: true, dados: itens };
-  } catch (erro) {
-    registrarLog('ERRO', 'Erro ao listar pertences perdidos: ' + erro.toString());
-    return { success: false, error: erro.toString() };
-  }
-}
-
-function cadastrarPertencePerdido(parametros) {
-  try {
-    var sheet = obterSheetPertencesPerdidos();
-    var estrutura = garantirEstruturaPertences(sheet);
-
-    var dono = (parametros.dono || '').toString().trim();
-    var descricao = (parametros.descricao || '').toString().trim();
-    var telefone = (parametros.telefone || '').toString().trim();
-    var dataEntrada = parametros.dataGuarda ? new Date(parametros.dataGuarda) : '';
-    if (dataEntrada && isNaN(dataEntrada.getTime())) {
-      dataEntrada = '';
-    }
-
-    var novoHistorico = (parametros.historicoContato || '').toString().trim();
-
-    var linha = new Array(estrutura.ultimaColuna).fill('');
-    definirValorLinhaFlexivel(linha, estrutura, ['dono do pertence', 'dono'], dono);
-    definirValorLinhaFlexivel(linha, estrutura, ['data da guarda', 'data'], dataEntrada);
-    definirValorLinhaFlexivel(linha, estrutura, ['descrição', 'descricao'], descricao);
-    definirValorLinhaFlexivel(linha, estrutura, ['telefone para contato', 'telefone'], telefone);
-    definirValorLinhaFlexivel(linha, estrutura, ['foi encontrado?', 'encontrado'], 'Não');
-    if (novoHistorico) {
-      definirValorLinhaFlexivel(linha, estrutura, ['histórico de contato', 'historico'], novoHistorico);
-    }
-
-    sheet.getRange(sheet.getLastRow() + 1, PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL, 1, estrutura.ultimaColuna)
-      .setValues([linha]);
-
-    registrarLog('ACHADOS', 'Novo pertence registrado para ' + (dono || 'sem nome'));
-    return { success: true };
-  } catch (erro) {
-    registrarLog('ERRO', 'Erro ao cadastrar pertence perdido: ' + erro.toString());
-    return { success: false, error: erro.toString() };
-  }
-}
-
-function atualizarPertencePerdido(parametros) {
-  try {
-    var idLinha = parseInt(parametros.idLinha || parametros.id || parametros.linha, 10);
-    if (!idLinha || idLinha < PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO) {
-      return { success: false, error: 'Linha inválida' };
-    }
-
-    var sheet = obterSheetPertencesPerdidos();
-    var estrutura = garantirEstruturaPertences(sheet);
-
-    var linhaAtual = sheet.getRange(idLinha, PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL, 1, estrutura.ultimaColuna).getValues()[0] || [];
-
-    if (parametros.dono !== undefined) {
-      definirValorLinhaFlexivel(linhaAtual, estrutura, ['dono do pertence', 'dono'], parametros.dono);
-    }
-    if (parametros.descricao !== undefined) {
-      definirValorLinhaFlexivel(linhaAtual, estrutura, ['descrição', 'descricao'], parametros.descricao);
-    }
-    if (parametros.telefone !== undefined) {
-      definirValorLinhaFlexivel(linhaAtual, estrutura, ['telefone para contato', 'telefone'], parametros.telefone);
-    }
-    if (parametros.dataGuarda !== undefined) {
-      var dataAtualizada = parametros.dataGuarda ? new Date(parametros.dataGuarda) : '';
-      if (dataAtualizada && isNaN(dataAtualizada.getTime())) {
-        dataAtualizada = '';
-      }
-      definirValorLinhaFlexivel(linhaAtual, estrutura, ['data da guarda', 'data'], dataAtualizada);
-    }
-    if (parametros.encontrado !== undefined) {
-      var encontradoValor = converterParaBoolean(parametros.encontrado) ? 'Sim' : 'Não';
-      definirValorLinhaFlexivel(linhaAtual, estrutura, ['foi encontrado?', 'encontrado'], encontradoValor);
-    }
-    if (parametros.historicoContato !== undefined) {
-      definirValorLinhaFlexivel(linhaAtual, estrutura, ['histórico de contato', 'historico'], parametros.historicoContato);
-    }
-
-    sheet.getRange(idLinha, PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL, 1, estrutura.ultimaColuna).setValues([linhaAtual]);
-    registrarLog('ACHADOS', 'Pertence atualizado na linha ' + idLinha);
-    return { success: true };
-  } catch (erro) {
-    registrarLog('ERRO', 'Erro ao atualizar pertence perdido: ' + erro.toString());
-    return { success: false, error: erro.toString() };
-  }
-}
-
-function registrarContatoPertence(parametros) {
-  try {
-    var idLinha = parseInt(parametros.idLinha || parametros.id || parametros.linha, 10);
-    if (!idLinha || idLinha < PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO) {
-      return { success: false, error: 'Linha inválida' };
-    }
-
-    var anotacao = (parametros.anotacao || '').toString().trim();
-    var responsavel = (parametros.usuarioResponsavel || parametros.responsavel || '').toString().trim() || 'Equipe';
-
-    var sheet = obterSheetPertencesPerdidos();
-    var estrutura = garantirEstruturaPertences(sheet);
-    var range = sheet.getRange(idLinha, PLANILHA_PERTENCES_PERDIDOS_COLUNA_INICIAL, 1, estrutura.ultimaColuna);
-    var linhaAtual = range.getValues()[0] || [];
-
-    var historicoAtual = obterValorLinhaFlexivel(linhaAtual, estrutura, ['histórico de contato', 'historico de contato', 'historico'], '');
-    var dataTexto = Utilities.formatDate(new Date(), 'America/Fortaleza', 'dd/MM/yyyy HH:mm');
-    var entrada = dataTexto + ' - ' + responsavel + (anotacao ? ': ' + anotacao : ': ligação registrada');
-    var novoHistorico = historicoAtual ? historicoAtual + '\n' + entrada : entrada;
-
-    definirValorLinhaFlexivel(linhaAtual, estrutura, ['histórico de contato', 'historico de contato', 'historico'], novoHistorico);
-    range.setValues([linhaAtual]);
-
-    registrarLog('ACHADOS', 'Contato registrado para pertence na linha ' + idLinha + ' por ' + responsavel);
-    return { success: true, historicoContato: novoHistorico };
-  } catch (erro) {
-    registrarLog('ERRO', 'Erro ao registrar contato de pertence: ' + erro.toString());
-    return { success: false, error: erro.toString() };
-  }
-}
-
-function excluirPertencePerdido(parametros) {
-  try {
-    var idLinha = parseInt(parametros.idLinha || parametros.id || parametros.linha, 10);
-    if (!idLinha || idLinha <= PLANILHA_PERTENCES_PERDIDOS_LINHA_CABECALHO) {
-      return { success: false, error: 'Linha inválida' };
-    }
-
-    var sheet = obterSheetPertencesPerdidos();
-    var ultimaLinha = sheet.getLastRow();
-    if (idLinha > ultimaLinha) {
-      return { success: false, error: 'Registro não encontrado' };
-    }
-
-    sheet.deleteRow(idLinha);
-
-    registrarLog('ACHADOS', 'Pertence excluído na linha ' + idLinha);
-    return { success: true };
-  } catch (erro) {
-    registrarLog('ERRO', 'Erro ao excluir pertence perdido: ' + erro.toString());
-    return { success: false, error: erro.toString() };
-  }
-}
-
 function registrarLog(acao, detalhes) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -7682,7 +7533,7 @@ function copiarDepoisLimparAba(abaOrigem, abaDestino) {
 
   var destinoLinha = Math.max(abaDestino.getLastRow(), 1) + 1;
   abaDestino.getRange(destinoLinha, 1, dados.length, ultimaColuna).setValues(dados);
-  abaOrigem.getRange(2, 1, quantidade, ultimaColuna).clearContent();
+  abaOrigem.deleteRows(2, quantidade);
 
   return dados.length;
 }
@@ -7724,7 +7575,8 @@ function executarBackupSistema() {
       { origem: 'Histórico Acompanhantes', arquivo: arquivoBackupGeral },
       { origem: 'Registro de Imagens', arquivo: arquivoBackupGeral },
       { origem: 'LOGS', arquivo: arquivoBackupLogs },
-      { origem: 'Termos de Responsabilidade', arquivo: arquivoBackupTermos }
+      { origem: 'Termos de Responsabilidade', arquivo: arquivoBackupTermos },
+      { origem: 'Movimentações', arquivo: arquivoBackupGeral }
     ];
 
     mapeamento.forEach(function(item) {
@@ -7764,6 +7616,131 @@ function executarBackupSistema() {
     registrarLog('BACKUP_ERRO', error.toString());
     return { success: false, error: error.toString() };
   }
+}
+
+// Lista todos os arquivos de backup existentes no Drive (metadados apenas, leve).
+// Não abre as planilhas — retorna nome, tipo, mês/ano, tamanho, data e link.
+function listarBackupsSistema() {
+  try {
+    var permissao = validarPermissaoAdmin({ usuarioId: usuarioContextoRequisicaoId });
+    if (!permissao.ok) {
+      return { success: false, error: permissao.error };
+    }
+
+    try {
+      DriveApp.getFolderById(PASTA_BACKUP_RAIZ_ID);
+    } catch (erroPasta) {
+      return { success: false, error: 'Pasta de backup não acessível no Drive.' };
+    }
+
+    var timezone = Session.getScriptTimeZone() || 'America/Fortaleza';
+    var tipos = [
+      { tipo: 'geral', prefixo: 'BACKUP-GERAL-', rotulo: 'Geral' },
+      { tipo: 'logs', prefixo: 'BACKUP-LOGS-', rotulo: 'Logs' },
+      { tipo: 'termos', prefixo: 'BACKUP-TERMOS-', rotulo: 'Termos' }
+    ];
+
+    var backups = [];
+    tipos.forEach(function(t) {
+      var arquivos = listarArquivosBackup(t.tipo);
+      arquivos.forEach(function(arquivo) {
+        try {
+          var nome = arquivo.getName();
+          var atualizado = arquivo.getLastUpdated();
+          var tamanho = 0;
+          try { tamanho = arquivo.getSize(); } catch (erroTamanho) { tamanho = 0; }
+          backups.push({
+            id: arquivo.getId(),
+            nome: nome,
+            tipo: t.tipo,
+            tipoRotulo: t.rotulo,
+            mesAno: extrairMesAnoDoNomeBackup(nome, t.prefixo),
+            url: arquivo.getUrl(),
+            atualizadoEm: atualizado ? Utilities.formatDate(atualizado, timezone, "yyyy-MM-dd'T'HH:mm:ss") : '',
+            atualizadoTimestamp: atualizado ? atualizado.getTime() : 0,
+            tamanhoBytes: tamanho
+          });
+        } catch (erroArquivo) {
+          registrarLog('AVISO_BACKUP', 'Falha ao ler metadados de backup: ' + erroArquivo.toString());
+        }
+      });
+    });
+
+    backups.sort(function(a, b) {
+      if (b.atualizadoTimestamp !== a.atualizadoTimestamp) {
+        return b.atualizadoTimestamp - a.atualizadoTimestamp;
+      }
+      return (b.nome || '').localeCompare(a.nome || '');
+    });
+
+    return {
+      success: true,
+      backups: backups,
+      total: backups.length
+    };
+  } catch (error) {
+    registrarLog('BACKUP_ERRO', 'Falha ao listar backups: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+// Abre um único arquivo de backup e retorna as abas (planilhas) que ele contém
+// com a quantidade de registros de cada uma. Chamado sob demanda ao expandir.
+function detalharBackup(dados) {
+  try {
+    var permissao = validarPermissaoAdmin({ usuarioId: usuarioContextoRequisicaoId });
+    if (!permissao.ok) {
+      return { success: false, error: permissao.error };
+    }
+
+    var fileId = dados && dados.id ? dados.id.toString().trim() : '';
+    if (!fileId) {
+      return { success: false, error: 'Identificador do backup não informado.' };
+    }
+
+    var planilha;
+    try {
+      planilha = SpreadsheetApp.openById(fileId);
+    } catch (erroAbrir) {
+      return { success: false, error: 'Não foi possível abrir o arquivo de backup.' };
+    }
+
+    var abas = planilha.getSheets().map(function(aba) {
+      var ultimaLinha = aba.getLastRow();
+      return {
+        nome: aba.getName(),
+        registros: ultimaLinha > 1 ? ultimaLinha - 1 : 0
+      };
+    });
+
+    abas.sort(function(a, b) {
+      if (b.registros !== a.registros) {
+        return b.registros - a.registros;
+      }
+      return (a.nome || '').localeCompare(b.nome || '');
+    });
+
+    var totalRegistros = abas.reduce(function(soma, item) {
+      return soma + (item.registros || 0);
+    }, 0);
+
+    return {
+      success: true,
+      abas: abas,
+      totalAbas: abas.length,
+      totalRegistros: totalRegistros
+    };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+// Extrai o trecho "yyyy-MM" do nome de um arquivo de backup.
+function extrairMesAnoDoNomeBackup(nome, prefixo) {
+  var texto = (nome || '').toString();
+  var resto = prefixo ? texto.replace(prefixo, '') : texto;
+  var match = resto.match(/(\d{4})-(\d{2})/);
+  return match ? match[0] : resto.trim();
 }
 
 // Funções para notificações

@@ -7,25 +7,6 @@
             console.warn('SCRIPT_URL vazio: window.SCRIPT_URL não foi definido pelo servidor. As chamadas via fetch falharão e o app dependerá do fallback google.script.run.');
         }
         // Estado da aplicação
-        function criarEstadoLiberacaoInicial() {
-            return {
-                colunas: [],
-                linhas: [],
-                filtros: {
-                    dataInicio: '',
-                    dataFim: '',
-                    paciente: '',
-                    prontuario: ''
-                },
-                chaveFiltrosAplicados: '',
-                totalPlanilha: 0,
-                totalFiltrado: 0,
-                carregando: false,
-                ultimaAtualizacao: null,
-                linhasCarregadas: false,
-                erro: ''
-            };
-        }
         function criarEstadoInicial() {
             return {
                 perfilAtual: 'geral',
@@ -44,25 +25,19 @@
                 movimentacoes: {},
                 historicoVisitantes: [],
                 historicoAcompanhantes: [],
-                achados: {
-                    itens: [],
-                    carregando: false,
-                    filtros: {
-                        busca: '',
-                        status: 'todos',
-                        dataInicio: '',
-                        dataFim: ''
-                    },
-                    resumo: {
-                        pendentes: 0,
-                        encontrados: 0
-                    }
-                },
                 usuarios: [],
                 logs: [],
                 registrosImagens: {
                     itens: [],
                     carregado: false,
+                    ultimaAtualizacao: null
+                },
+                backups: {
+                    itens: [],
+                    carregando: false,
+                    carregado: false,
+                    detalhes: {},
+                    expandidos: {},
                     ultimaAtualizacao: null
                 },
                 carregamentoTermosId: 0,
@@ -73,8 +48,7 @@
                     prontuario: ''
                 },
                 autenticado: false,
-                usuarioAutenticado: null,
-                liberacao: criarEstadoLiberacaoInicial()
+                usuarioAutenticado: null
             };
         }
         let estado = criarEstadoInicial();
@@ -86,12 +60,6 @@
         };
         let turnoIntervalId = null;
         let carregamentoContingenciaId = 0;
-        function obterEstadoLiberacao() {
-            if (!estado.liberacao) {
-                estado.liberacao = criarEstadoLiberacaoInicial();
-            }
-            return estado.liberacao;
-        }
         let estadoPdfTemporario = { fileId: '', url: '', embedUrl: '', timeoutId: null };
         const galeriasImagem = {};
         const estadoVisualizadorImagem = { grupo: '', indice: 0 };
@@ -126,7 +94,13 @@
         const SESSAO_TTL_MS = 1000 * 60 * 60 * 8; // 8 horas
         const CACHE_CHAMADAS_LEITURA_MS = 45 * 1000;
         const cacheChamadasLeitura = new Map();
-        const acoesLeituraComCache = new Set(['getArmarios', 'getUnidades', 'getSetores', 'getUsuarios', 'getNotificacoes']);
+        // Leituras idempotentes com cache curto no cliente (45s). Qualquer
+        // ação de escrita bem-sucedida limpa o cache inteiro, então não há
+        // risco de dado obsoleto após salvar/liberar/movimentar.
+        const acoesLeituraComCache = new Set([
+            'getArmarios', 'getUnidades', 'getSetores', 'getUsuarios', 'getNotificacoes',
+            'getTermo', 'getMovimentacoes', 'getMovimentacoesResumo', 'getRegistrosImagens'
+        ]);
 
         const AVATAR_OPTIONS = [
             {
@@ -672,6 +646,10 @@
             filterSearchWrapper: document.querySelector('.filter-search'),
             filterSearchClear: document.getElementById('dashboard-search-clear'),
             dashboardSearch: document.getElementById('dashboard-search'),
+            buscaFlutuante: document.getElementById('busca-flutuante'),
+            buscaFlutuanteToggle: document.getElementById('busca-flutuante-toggle'),
+            buscaFlutuanteInput: document.getElementById('busca-flutuante-input'),
+            buscaFlutuanteLimpar: document.getElementById('busca-flutuante-limpar'),
             contingenciaButton: document.getElementById('btn-contingencia'),
             cardsHero: document.querySelector('.cards-hero'),
             cardProximo: document.querySelector('.card.proximo'),
@@ -787,6 +765,9 @@
             logsBtnLimpar: document.getElementById('logs-btn-limpar'),
             backupExecutarBtn: document.getElementById('backup-executar'),
             backupResultado: document.getElementById('backup-resultado'),
+            backupListaRefreshBtn: document.getElementById('backup-lista-refresh'),
+            backupListaResumo: document.getElementById('backup-lista-resumo'),
+            backupLista: document.getElementById('backup-lista'),
             tabelaHistoricoVisitantesBody: document.querySelector('#tabela-historico-visitantes tbody'),
             historicoVisitantesDataInicio: document.getElementById('historico-visitantes-data-inicio'),
             historicoVisitantesDataFim: document.getElementById('historico-visitantes-data-fim'),
@@ -799,15 +780,6 @@
             historicoAcompanhantesFiltroPessoa: document.getElementById('historico-acompanhantes-filtro-pessoa'),
             historicoAcompanhantesBusca: document.getElementById('historico-acompanhantes-busca'),
             historicoAcompanhantesBtnLimpar: document.getElementById('historico-acompanhantes-btn-limpar'),
-            tabelaLiberacao: document.getElementById('tabela-liberacao'),
-            tabelaLiberacaoHead: document.querySelector('#tabela-liberacao thead tr'),
-            tabelaLiberacaoBody: document.querySelector('#tabela-liberacao tbody'),
-            liberacaoDataInicio: document.getElementById('liberacao-data-inicio'),
-            liberacaoDataFim: document.getElementById('liberacao-data-fim'),
-            liberacaoProntuario: document.getElementById('liberacao-prontuario'),
-            liberacaoPaciente: document.getElementById('liberacao-paciente'),
-            liberacaoRefresh: document.getElementById('liberacao-refresh'),
-            liberacaoResumo: document.getElementById('liberacao-resumo'),
             impressaoReservaModal: document.getElementById('impressao-reserva-modal'),
             impressaoReservaClose: document.getElementById('impressao-reserva-close'),
             impressaoReservaFechar: document.getElementById('impressao-reserva-fechar'),
@@ -838,35 +810,6 @@
             imageViewerSummaryTitle: document.getElementById('image-viewer-summary-title'),
             imageViewerSummaryText: document.getElementById('image-viewer-summary-text'),
             imageViewerCounter: document.getElementById('image-viewer-counter'),
-            tabelaAchadosBody: document.querySelector('#tabela-achados tbody'),
-            achadosBusca: document.getElementById('achados-busca'),
-            achadosStatus: document.getElementById('achados-status'),
-            achadosDataInicio: document.getElementById('achados-data-inicio'),
-            achadosDataFim: document.getElementById('achados-data-fim'),
-            achadosResumo: document.getElementById('achados-resumo'),
-            achadosFiltroAplicado: document.getElementById('achados-filtro-aplicado'),
-            achadosEmpty: document.getElementById('achados-empty'),
-            achadosLoading: document.getElementById('achados-loading'),
-            achadosNovo: document.getElementById('achados-novo'),
-            achadosRefresh: document.getElementById('achados-refresh'),
-            achadosAplicarFiltros: document.getElementById('achados-aplicar-filtros'),
-            achadosLimparFiltros: document.getElementById('achados-limpar-filtros'),
-            achadosTotalPendentes: document.getElementById('achados-total-pendentes'),
-            achadosTotalEncontrados: document.getElementById('achados-total-encontrados'),
-            achadosCardPendentes: document.getElementById('achados-card-pendentes'),
-            achadosCardEncontrados: document.getElementById('achados-card-encontrados'),
-            achadoModal: document.getElementById('achado-modal'),
-            achadoModalTitle: document.getElementById('achado-modal-title'),
-            achadoModalClose: document.getElementById('achado-modal-close'),
-            achadoForm: document.getElementById('achado-form'),
-            achadoId: document.getElementById('achado-id'),
-            achadoDono: document.getElementById('achado-dono'),
-            achadoData: document.getElementById('achado-data'),
-            achadoTelefone: document.getElementById('achado-telefone'),
-            achadoStatusSelect: document.getElementById('achado-status'),
-            achadoDescricao: document.getElementById('achado-descricao'),
-            achadoHistorico: document.getElementById('achado-historico'),
-            achadoBtnCancelar: document.getElementById('achado-btn-cancelar'),
             logoutButton: document.getElementById('logout-button')
         };
         const mobileNavQuery = window.matchMedia('(max-width: 1024px)');
@@ -1216,18 +1159,6 @@
                 resumo: ['Status', 'Paciente', 'Armário'],
                 detalhesPrioritarios: ['Hora Início', 'Volumes', 'Usuário', 'WhatsApp'],
             },
-            'tabela-liberacao': {
-                principal: [0, 'Paciente', 'Armário'],
-                meta: ['Data', 'Horário', 'Data/Hora'],
-                resumo: ['Usuário', 'Status'],
-                detalhesPrioritarios: ['Prontuário', 'Unidade', 'Ações'],
-            },
-            'tabela-achados': {
-                principal: ['Descrição', 'Dono do pertence'],
-                meta: ['Data da guarda'],
-                resumo: ['Encontrado?', 'Telefone'],
-                detalhesPrioritarios: ['Dono do pertence', 'Telefone', 'Última ligação', 'Ações'],
-            },
             'tabela-termos': {
                 principal: ['Paciente', 'Acompanhante'],
                 meta: ['Aplicado em', 'Status'],
@@ -1269,6 +1200,7 @@
                     gerenciadorCartoesTabela.registrar(tabela, config);
                 }
             });
+            inicializarFiltrosLista();
         }
         popularAvataresPadrao();
         sincronizarSelecaoAvatar();
@@ -1294,6 +1226,108 @@
         }
         function aprimorarSeletoresCabecalho() {
             document.querySelectorAll('.selector-control .selector-input').forEach(select => criarSelectorPersonalizado(select));
+            inicializarPillContexto();
+            inicializarTooltipsRail();
+        }
+        // Pill de contexto do header: espelha os selects de perfil/unidade e
+        // controla o popover que contém os dois seletores.
+        function atualizarPillContexto() {
+            const perfilSelect = document.getElementById('profile-select');
+            const unidadeSelect = document.getElementById('unit-select');
+            const alvoPerfil = document.getElementById('context-pill-profile');
+            const alvoUnidade = document.getElementById('context-pill-unit');
+            if (alvoPerfil && perfilSelect) {
+                alvoPerfil.textContent = perfilSelect.options[perfilSelect.selectedIndex]?.textContent || 'Perfil geral';
+            }
+            if (alvoUnidade && unidadeSelect) {
+                alvoUnidade.textContent = unidadeSelect.options[unidadeSelect.selectedIndex]?.textContent || 'Todas as unidades';
+            }
+        }
+        let pillContextoInicializada = false;
+        function inicializarPillContexto() {
+            if (pillContextoInicializada) {
+                atualizarPillContexto();
+                return;
+            }
+            const wrap = document.querySelector('.header-context');
+            const pill = document.getElementById('context-pill');
+            if (!wrap || !pill) return;
+            pillContextoInicializada = true;
+            const fechar = () => {
+                wrap.classList.remove('open');
+                pill.setAttribute('aria-expanded', 'false');
+            };
+            pill.addEventListener('click', () => {
+                const aberto = wrap.classList.toggle('open');
+                pill.setAttribute('aria-expanded', String(aberto));
+            });
+            // capture: listeners com stopPropagation (ex.: botões dos cards)
+            // não podem impedir o fechamento ao tocar fora
+            document.addEventListener('click', event => {
+                if (!wrap.contains(event.target)) fechar();
+            }, true);
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && wrap.classList.contains('open')) {
+                    fechar();
+                    pill.focus();
+                }
+            });
+            ['profile-select', 'unit-select'].forEach(id => {
+                document.getElementById(id)?.addEventListener('change', atualizarPillContexto);
+            });
+            atualizarPillContexto();
+        }
+        // Steppers dos wizards: acendem os marcos conforme o rótulo
+        // "Passo X de Y" muda (a lógica dos wizards permanece intocada).
+        function inicializarSteppers() {
+            document.querySelectorAll('.wizard-stepper[data-progress-label]').forEach(stepperEl => {
+                if (stepperEl.dataset.stepperInicializado) return;
+                const label = document.getElementById(stepperEl.dataset.progressLabel);
+                if (!label) return;
+                stepperEl.dataset.stepperInicializado = 'true';
+                const aplicar = () => {
+                    const correspondencia = (label.textContent || '').match(/(\d+)\s*de\s*(\d+)/);
+                    if (!correspondencia) return;
+                    const atual = Number(correspondencia[1]);
+                    stepperEl.querySelectorAll('.wizard-stepper-step').forEach(step => {
+                        const indice = Number(step.dataset.index);
+                        step.classList.toggle('is-done', indice < atual);
+                        step.classList.toggle('is-active', indice === atual);
+                    });
+                };
+                new MutationObserver(aplicar).observe(label, { childList: true, characterData: true, subtree: true });
+                aplicar();
+            });
+        }
+        // Tooltip flutuante do rail (elemento único no body — o rail tem
+        // overflow-y:auto e clipparia pseudo-elementos posicionados).
+        let railTooltipEl = null;
+        function inicializarTooltipsRail() {
+            if (railTooltipEl || window.matchMedia('(hover: none)').matches) return;
+            const alvos = document.querySelectorAll('.sidebar [data-tooltip]');
+            if (!alvos.length) return;
+            railTooltipEl = document.createElement('div');
+            railTooltipEl.className = 'rail-tooltip';
+            railTooltipEl.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(railTooltipEl);
+            const mostrar = alvo => {
+                if (window.matchMedia('(max-width: 1024px)').matches) return;
+                const texto = alvo.getAttribute('data-tooltip');
+                if (!texto) return;
+                railTooltipEl.textContent = texto;
+                const rect = alvo.getBoundingClientRect();
+                railTooltipEl.style.left = `${Math.round(rect.right + 10)}px`;
+                railTooltipEl.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
+                railTooltipEl.style.transform = 'translateY(-50%)';
+                railTooltipEl.classList.add('visible');
+            };
+            const esconder = () => railTooltipEl.classList.remove('visible');
+            alvos.forEach(alvo => {
+                alvo.addEventListener('mouseenter', () => mostrar(alvo));
+                alvo.addEventListener('mouseleave', esconder);
+                alvo.addEventListener('focus', () => mostrar(alvo));
+                alvo.addEventListener('blur', esconder);
+            });
         }
         function criarSelectorPersonalizado(select) {
             if (!select) return;
@@ -1423,6 +1457,7 @@
                 button.classList.toggle('is-selected', Boolean(isSelected));
                 button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             });
+            atualizarPillContexto();
         }
         function toggleSelectorDropdown(instance, forceState) {
             const { control, trigger } = instance;
@@ -1534,6 +1569,8 @@
                 }
             });
         }
+        // capture: garante o fechamento mesmo quando o clique acontece em
+        // elementos que chamam stopPropagation (botões dos cards etc.)
         document.addEventListener('click', event => {
             const control = event.target.closest('.selector-control');
             customSelectorStore.forEach(instance => {
@@ -1542,7 +1579,7 @@
                     instance.trigger.setAttribute('aria-expanded', 'false');
                 }
             });
-        });
+        }, true);
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
                 customSelectorStore.forEach(instance => {
@@ -1577,7 +1614,6 @@
         }
         function configurarEntradasMaiusculas() {
             const camposFixos = [
-                document.getElementById('liberacao-paciente'),
                 document.getElementById('nome-paciente'),
                 document.getElementById('nome-visitante'),
                 document.getElementById('termo-resp-nome'),
@@ -2344,6 +2380,7 @@
             aplicarPreferenciasCabecalhoRestauradas();
             atualizarInterface();
             aprimorarSeletoresCabecalho();
+            inicializarSteppers();
             inicializarCanvasAssinatura();
             inicializarEventos();
             await carregarDadosIniciais();
@@ -2372,6 +2409,9 @@
                 return;
             }
             loginInicializado = true;
+            inicializarTogglesSenha();
+            inicializarAvisoCapsLock();
+            inicializarResetSenha();
             const sessaoRestaurada = restaurarSessaoUsuario();
             if (sessaoRestaurada && !estado.autenticado) {
                 const usuarioRestaurado = {
@@ -2458,6 +2498,85 @@
                 }
             });
         }
+        function abrirModalResetSenha() {
+            const modal = document.getElementById('reset-senha-modal');
+            if (!modal) return;
+            document.getElementById('reset-senha-form-etapa1')?.reset();
+            document.getElementById('reset-senha-form-etapa2')?.reset();
+            document.getElementById('reset-senha-form-etapa1')?.classList.remove('hidden');
+            document.getElementById('reset-senha-form-etapa2')?.classList.add('hidden');
+            if (modal.style.display !== 'flex') {
+                travaRolagem.aplicar();
+            }
+            modal.style.display = 'flex';
+            document.getElementById('reset-senha-login')?.focus();
+        }
+        function fecharModalResetSenha() {
+            const modal = document.getElementById('reset-senha-modal');
+            if (!modal) return;
+            if (modal.style.display === 'flex') {
+                travaRolagem.remover();
+            }
+            modal.style.display = 'none';
+        }
+        function inicializarResetSenha() {
+            const botaoAbrir = document.getElementById('login-esqueci-senha');
+            const botaoFechar = document.getElementById('reset-senha-modal-close');
+            const form1 = document.getElementById('reset-senha-form-etapa1');
+            const form2 = document.getElementById('reset-senha-form-etapa2');
+
+            botaoAbrir?.addEventListener('click', abrirModalResetSenha);
+            botaoFechar?.addEventListener('click', fecharModalResetSenha);
+
+            form1?.addEventListener('submit', async (evento) => {
+                evento.preventDefault();
+                const login = document.getElementById('reset-senha-login')?.value.trim();
+                if (!login) return;
+                const botao = document.getElementById('reset-senha-btn-enviar');
+                const finalizarLoading = iniciarLoadingBotao(botao);
+                try {
+                    const resultado = await callGoogleScript('solicitarResetSenha', { usuario: login, matricula: login }, { tentativas: 1 });
+                    mostrarSucesso(resultado.message || 'Se o usuário existir, enviaremos um código.');
+                    form1.classList.add('hidden');
+                    form2.classList.remove('hidden');
+                    form2.dataset.login = login;
+                    document.getElementById('reset-senha-codigo')?.focus();
+                } catch (erro) {
+                    console.error('Erro ao solicitar reset de senha:', erro);
+                    mostrarErro('Não foi possível processar a solicitação. Tente novamente.');
+                } finally {
+                    finalizarLoading();
+                }
+            });
+
+            form2?.addEventListener('submit', async (evento) => {
+                evento.preventDefault();
+                const login = form2.dataset.login;
+                const codigo = document.getElementById('reset-senha-codigo')?.value.trim();
+                const novaSenha = document.getElementById('reset-senha-nova')?.value.trim();
+                const confirmarSenha = document.getElementById('reset-senha-confirmar')?.value.trim();
+                if (novaSenha !== confirmarSenha) {
+                    mostrarErro('A confirmação de senha não coincide.');
+                    return;
+                }
+                const botao = document.getElementById('reset-senha-btn-confirmar');
+                const finalizarLoading = iniciarLoadingBotao(botao);
+                try {
+                    const resultado = await callGoogleScript('confirmarResetSenha', { usuario: login, matricula: login, codigo, novaSenha, confirmarSenha }, { tentativas: 1 });
+                    if (resultado.success) {
+                        mostrarSucesso('Senha redefinida com sucesso. Faça login com a nova senha.');
+                        fecharModalResetSenha();
+                    } else {
+                        notificarErroPadrao(resultado);
+                    }
+                } catch (erro) {
+                    console.error('Erro ao confirmar reset de senha:', erro);
+                    mostrarErro('Não foi possível redefinir a senha. Tente novamente.');
+                } finally {
+                    finalizarLoading();
+                }
+            });
+        }
         function realizarLogout() {
             estado = criarEstadoInicial();
             aplicacaoInicializada = false;
@@ -2514,23 +2633,6 @@
             if (headerTitle) {
                 headerTitle.textContent = 'Monitor';
             }
-            if (elementos.liberacaoResumo) {
-                elementos.liberacaoResumo.textContent = 'Selecione um período para visualizar os registros de liberação.';
-            }
-            const padraoLocal = obterDataHoraLocalPadrao();
-            if (elementos.liberacaoDataInicio) {
-                elementos.liberacaoDataInicio.value = padraoLocal.data;
-            }
-            if (elementos.liberacaoDataFim) {
-                elementos.liberacaoDataFim.value = padraoLocal.data;
-            }
-            if (elementos.liberacaoProntuario) {
-                elementos.liberacaoProntuario.value = '';
-            }
-            if (elementos.liberacaoPaciente) {
-                elementos.liberacaoPaciente.value = '';
-            }
-            mostrarEstadoTabelaLiberacao('Selecione um período e aplique os filtros para carregar os registros de liberação.');
             termoPassoAtual = 0;
             termoArmarioAtual = null;
             movimentacaoArmarioAtual = null;
@@ -2598,11 +2700,17 @@
                 skeletonCard.className = 'armario-card skeleton';
                 skeletonCard.innerHTML = `
                     <div class="armario-status-bar skeleton-block" aria-hidden="true"></div>
-                    <div class="armario-header minimal">
+                    <div class="armario-card-top">
                         <div class="armario-number skeleton-block" aria-hidden="true"></div>
                         <div class="skeleton-status" aria-hidden="true"></div>
                     </div>
-                    <div class="armario-paciente-line skeleton-line" aria-hidden="true"></div>
+                    <div class="armario-card-info">
+                        <div class="skeleton-chip" aria-hidden="true"></div>
+                    </div>
+                    <div class="armario-card-actions">
+                        <div class="skeleton-status" aria-hidden="true"></div>
+                        <div class="skeleton-status" aria-hidden="true"></div>
+                    </div>
                 `;
                 elementos.armariosContainer.appendChild(skeletonCard);
             }
@@ -3329,6 +3437,34 @@
             const mensagem = resultado.error || mensagemPadrao;
             mostrarErro(mensagem);
         }
+        function inicializarTogglesSenha() {
+            document.querySelectorAll('.login-toggle-senha').forEach(botao => {
+                if (botao.dataset.toggleSenhaLigado === '1') return;
+                botao.dataset.toggleSenhaLigado = '1';
+                botao.addEventListener('click', () => {
+                    const input = botao.closest('.login-input-wrap')?.querySelector('input');
+                    if (!input) return;
+                    const mostrando = input.type === 'text';
+                    input.type = mostrando ? 'password' : 'text';
+                    botao.setAttribute('aria-pressed', String(!mostrando));
+                    botao.setAttribute('aria-label', mostrando ? 'Mostrar senha' : 'Ocultar senha');
+                    const icone = botao.querySelector('i');
+                    if (icone) icone.className = mostrando ? 'fas fa-eye' : 'fas fa-eye-slash';
+                });
+            });
+        }
+        function inicializarAvisoCapsLock() {
+            const campo = elementos.loginSenha;
+            const aviso = document.getElementById('login-capslock-aviso');
+            if (!campo || !aviso) return;
+            const verificar = evento => {
+                const ativo = typeof evento.getModifierState === 'function' && evento.getModifierState('CapsLock');
+                aviso.classList.toggle('hidden', !ativo);
+            };
+            campo.addEventListener('keyup', verificar);
+            campo.addEventListener('keydown', verificar);
+            campo.addEventListener('blur', () => aviso.classList.add('hidden'));
+        }
         function calcularHoraPrevistaSaida() {
             const agora = new Date();
             agora.setHours(agora.getHours() + 1);
@@ -3375,6 +3511,33 @@
             }
             eventosInicializados = true;
             configurarEntradasMaiusculas();
+            document.getElementById('alterar-senha-form')?.addEventListener('submit', async (evento) => {
+                evento.preventDefault();
+                const senhaAtual = document.getElementById('alterar-senha-atual')?.value.trim();
+                const novaSenha = document.getElementById('alterar-senha-nova')?.value.trim();
+                const confirmarSenha = document.getElementById('alterar-senha-confirmar')?.value.trim();
+                if (novaSenha !== confirmarSenha) {
+                    mostrarErro('A confirmação de senha não coincide.');
+                    return;
+                }
+                const botao = document.getElementById('alterar-senha-btn-salvar');
+                const finalizarLoading = iniciarLoadingBotao(botao);
+                try {
+                    const resultado = await callGoogleScript('alterarMinhaSenha', { senhaAtual, novaSenha, confirmarSenha }, { tentativas: 1 });
+                    if (resultado.success) {
+                        mostrarSucesso('Senha alterada com sucesso.');
+                        evento.target.reset();
+                        fecharModalAvatar();
+                    } else {
+                        notificarErroPadrao(resultado);
+                    }
+                } catch (erro) {
+                    console.error('Erro ao alterar senha:', erro);
+                    mostrarErro('Não foi possível alterar a senha. Tente novamente.');
+                } finally {
+                    finalizarLoading();
+                }
+            });
             mobileNavQuery.addEventListener('change', sincronizarSidebarComViewport);
             sincronizarSidebarComViewport(mobileNavQuery);
             if (elementos.sidebarToggle) {
@@ -3497,15 +3660,6 @@
             elementos.usuarioModalClose.addEventListener('click', fecharModalUsuario);
             elementos.btnCancelar.addEventListener('click', fecharModalArmario);
             elementos.usuarioBtnCancelar.addEventListener('click', fecharModalUsuario);
-            if (elementos.achadoModalClose) {
-                elementos.achadoModalClose.addEventListener('click', fecharModalAchado);
-            }
-            if (elementos.achadoBtnCancelar) {
-                elementos.achadoBtnCancelar.addEventListener('click', fecharModalAchado);
-            }
-            if (elementos.achadoForm) {
-                elementos.achadoForm.addEventListener('submit', salvarAchado);
-            }
             const atualizarVisibilidadeBotaoLimparBusca = () => {
                 if (!elementos.filterSearchClear || !elementos.dashboardSearch) return;
                 const possuiTexto = (elementos.dashboardSearch.value || '').trim().length > 0;
@@ -3531,11 +3685,18 @@
                     });
                 });
             }
+            const renderizarArmariosBuscaDebounced = debounce(renderizarArmarios, 150);
             if (elementos.dashboardSearch) {
                 elementos.dashboardSearch.addEventListener('input', () => {
                     estado.buscaDashboard = elementos.dashboardSearch.value || '';
                     atualizarVisibilidadeBotaoLimparBusca();
-                    renderizarArmarios();
+                    if (elementos.buscaFlutuanteInput && elementos.buscaFlutuanteInput.value !== estado.buscaDashboard) {
+                        elementos.buscaFlutuanteInput.value = estado.buscaDashboard;
+                        if (elementos.buscaFlutuanteLimpar) {
+                            elementos.buscaFlutuanteLimpar.classList.toggle('visible', estado.buscaDashboard.trim().length > 0);
+                        }
+                    }
+                    renderizarArmariosBuscaDebounced();
                 });
             }
             if (elementos.filterSearchWrapper && elementos.dashboardSearch) {
@@ -3547,94 +3708,94 @@
                 elementos.filterSearchClear.addEventListener('click', () => {
                     elementos.dashboardSearch.value = '';
                     estado.buscaDashboard = '';
+                    if (elementos.buscaFlutuanteInput) {
+                        elementos.buscaFlutuanteInput.value = '';
+                    }
+                    if (elementos.buscaFlutuanteLimpar) {
+                        elementos.buscaFlutuanteLimpar.classList.remove('visible');
+                    }
                     atualizarVisibilidadeBotaoLimparBusca();
                     renderizarArmarios();
                     elementos.dashboardSearch.focus();
                 });
+            }
+            // Busca flutuante (lupa): reaproveita o mesmo estado (estado.buscaDashboard) e o
+            // mesmo render da busca do topo, para pesquisar sem precisar rolar de volta ao topo.
+            if (elementos.buscaFlutuante && elementos.buscaFlutuanteInput && elementos.buscaFlutuanteToggle) {
+                const atualizarLimparFlutuante = () => {
+                    if (!elementos.buscaFlutuanteLimpar) return;
+                    const possuiTexto = (elementos.buscaFlutuanteInput.value || '').trim().length > 0;
+                    elementos.buscaFlutuanteLimpar.classList.toggle('visible', possuiTexto);
+                };
+
+                let heroForaDaTela = false;
+                const atualizarVisibilidadeBuscaFlutuante = () => {
+                    const mostrar = heroForaDaTela && estado.paginaAtual === 'dashboard';
+                    elementos.buscaFlutuante.classList.toggle('visivel', mostrar);
+                    elementos.buscaFlutuante.setAttribute('aria-hidden', mostrar ? 'false' : 'true');
+                    if (!mostrar) {
+                        elementos.buscaFlutuante.classList.remove('expandido');
+                        elementos.buscaFlutuanteToggle.setAttribute('aria-expanded', 'false');
+                    }
+                };
+                // Exposto para a navegação reavaliar ao entrar/sair do Monitor.
+                estado.atualizarVisibilidadeBuscaFlutuante = atualizarVisibilidadeBuscaFlutuante;
+
+                const heroBusca = document.querySelector('.monitor-busca-hero') || elementos.filterSearchWrapper;
+                if (heroBusca && 'IntersectionObserver' in window) {
+                    const observador = new IntersectionObserver((entradas) => {
+                        heroForaDaTela = !entradas[0].isIntersecting;
+                        atualizarVisibilidadeBuscaFlutuante();
+                    }, { threshold: 0 });
+                    observador.observe(heroBusca);
+                }
+
+                elementos.buscaFlutuanteToggle.addEventListener('click', () => {
+                    const expandir = !elementos.buscaFlutuante.classList.contains('expandido');
+                    elementos.buscaFlutuante.classList.toggle('expandido', expandir);
+                    elementos.buscaFlutuanteToggle.setAttribute('aria-expanded', expandir ? 'true' : 'false');
+                    if (expandir) {
+                        elementos.buscaFlutuanteInput.focus();
+                    }
+                });
+
+                elementos.buscaFlutuanteInput.addEventListener('input', () => {
+                    estado.buscaDashboard = elementos.buscaFlutuanteInput.value || '';
+                    if (elementos.dashboardSearch && elementos.dashboardSearch.value !== estado.buscaDashboard) {
+                        elementos.dashboardSearch.value = estado.buscaDashboard;
+                    }
+                    atualizarVisibilidadeBotaoLimparBusca();
+                    atualizarLimparFlutuante();
+                    renderizarArmariosBuscaDebounced();
+                });
+
+                elementos.buscaFlutuanteInput.addEventListener('keydown', (evento) => {
+                    if (evento.key === 'Escape') {
+                        elementos.buscaFlutuante.classList.remove('expandido');
+                        elementos.buscaFlutuanteToggle.setAttribute('aria-expanded', 'false');
+                        elementos.buscaFlutuanteToggle.focus();
+                    }
+                });
+
+                if (elementos.buscaFlutuanteLimpar) {
+                    elementos.buscaFlutuanteLimpar.addEventListener('click', () => {
+                        elementos.buscaFlutuanteInput.value = '';
+                        estado.buscaDashboard = '';
+                        if (elementos.dashboardSearch) {
+                            elementos.dashboardSearch.value = '';
+                        }
+                        atualizarVisibilidadeBotaoLimparBusca();
+                        atualizarLimparFlutuante();
+                        renderizarArmarios();
+                        elementos.buscaFlutuanteInput.focus();
+                    });
+                }
             }
             if (elementos.contingenciaButton) {
                 elementos.contingenciaButton.addEventListener('click', abrirCadastroContingencia);
             }
             atualizarBotoesFiltroDashboard();
             atualizarVisibilidadeBotaoLimparBusca();
-            configurarBotaoAcao(elementos.achadosNovo, () => abrirModalAchado());
-            configurarBotaoAcao(elementos.achadosRefresh, () => carregarAchados({ forcarAtualizacao: true }));
-            configurarBotaoAcao(elementos.achadosAplicarFiltros, () => carregarAchados({ forcarAtualizacao: true }));
-            configurarBotaoAcao(elementos.achadosLimparFiltros, () => {
-                const alvo = obterEstadoAchados();
-                alvo.filtros = { busca: '', status: 'todos', dataInicio: '', dataFim: '' };
-                if (elementos.achadosBusca) elementos.achadosBusca.value = '';
-                if (elementos.achadosStatus) elementos.achadosStatus.value = 'todos';
-                if (elementos.achadosDataInicio) elementos.achadosDataInicio.value = '';
-                if (elementos.achadosDataFim) elementos.achadosDataFim.value = '';
-                renderizarTabelaAchados();
-            });
-            if (elementos.achadosBusca) {
-                elementos.achadosBusca.addEventListener('input', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.busca = elementos.achadosBusca.value || '';
-                    renderizarTabelaAchados();
-                });
-            }
-            if (elementos.achadosStatus) {
-                elementos.achadosStatus.addEventListener('change', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.status = elementos.achadosStatus.value || 'todos';
-                    renderizarTabelaAchados();
-                });
-            }
-            if (elementos.achadosDataInicio) {
-                elementos.achadosDataInicio.addEventListener('change', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.dataInicio = elementos.achadosDataInicio.value || '';
-                    renderizarTabelaAchados();
-                });
-            }
-            if (elementos.achadosDataFim) {
-                elementos.achadosDataFim.addEventListener('change', () => {
-                    const alvo = obterEstadoAchados();
-                    alvo.filtros.dataFim = elementos.achadosDataFim.value || '';
-                    renderizarTabelaAchados();
-                });
-            }
-            const padraoLocalLiberacao = obterDataHoraLocalPadrao();
-            if (elementos.liberacaoDataInicio) {
-                const padraoInicio = converterDataTextoParaISO(elementos.liberacaoDataInicio.value) || padraoLocalLiberacao.data;
-                elementos.liberacaoDataInicio.value = padraoInicio;
-                elementos.liberacaoDataInicio.addEventListener('change', () => {
-                    const iso = converterDataTextoParaISO(elementos.liberacaoDataInicio.value);
-                    elementos.liberacaoDataInicio.value = iso || '';
-                });
-            }
-            if (elementos.liberacaoDataFim) {
-                const padraoFim = converterDataTextoParaISO(elementos.liberacaoDataFim.value) || padraoLocalLiberacao.data;
-                elementos.liberacaoDataFim.value = padraoFim;
-                elementos.liberacaoDataFim.addEventListener('change', () => {
-                    const iso = converterDataTextoParaISO(elementos.liberacaoDataFim.value);
-                    elementos.liberacaoDataFim.value = iso || '';
-                });
-            }
-            if (elementos.liberacaoProntuario) {
-                elementos.liberacaoProntuario.addEventListener('keydown', event => {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        carregarTabelaLiberacao({ forcarAtualizacao: true });
-                    }
-                });
-            }
-            if (elementos.liberacaoPaciente) {
-                elementos.liberacaoPaciente.addEventListener('keydown', event => {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        carregarTabelaLiberacao({ forcarAtualizacao: true });
-                    }
-                });
-            }
-            if (elementos.liberacaoRefresh) {
-                configurarBotaoAcao(elementos.liberacaoRefresh, async () => {
-                    await carregarTabelaLiberacao({ forcarAtualizacao: true });
-                });
-            }
             // Formulários
             elementos.armarioForm.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -3921,6 +4082,19 @@
             if (elementos.backupExecutarBtn) {
                 elementos.backupExecutarBtn.addEventListener('click', executarBackupSistemaFrontend);
             }
+            if (elementos.backupListaRefreshBtn) {
+                elementos.backupListaRefreshBtn.addEventListener('click', () => carregarListaBackups({ forcar: true }));
+            }
+            if (elementos.backupLista) {
+                elementos.backupLista.addEventListener('click', (evento) => {
+                    const botao = evento.target.closest('.backup-card-detalhes-btn');
+                    if (!botao || !elementos.backupLista.contains(botao)) return;
+                    const id = botao.dataset.backupId;
+                    if (id) {
+                        alternarDetalhesBackup(id);
+                    }
+                });
+            }
             const aplicarFiltrosHistoricoVisitantesDebounced = debounce(aplicarFiltrosHistoricoVisitantes, 150);
             if (elementos.historicoVisitantesDataInicio) {
                 elementos.historicoVisitantesDataInicio.addEventListener('change', aplicarFiltrosHistoricoVisitantesDebounced);
@@ -4117,6 +4291,11 @@
 
             estado.paginaAtual = pagina;
 
+            // Reavaliar a lupa flutuante (só aparece no Monitor).
+            if (typeof estado.atualizarVisibilidadeBuscaFlutuante === 'function') {
+                estado.atualizarVisibilidadeBuscaFlutuante();
+            }
+
             // Carregar dados específicos da página
             carregarDadosTabelas();
         }
@@ -4206,394 +4385,6 @@
             }
         }
 
-        // Achados e Perdidos
-        function obterEstadoAchados() {
-            if (!estado.achados) {
-                estado.achados = {
-                    itens: [],
-                    carregando: false,
-                    salvando: false,
-                    filtros: {
-                        busca: '',
-                        status: 'todos',
-                        dataInicio: '',
-                        dataFim: ''
-                    },
-                    resumo: {
-                        pendentes: 0,
-                        encontrados: 0
-                    }
-                };
-            }
-            return estado.achados;
-        }
-        function mapearItemAchado(item) {
-            const dataBruta = item?.dataGuarda;
-            const dataObjeto = dataBruta ? new Date(dataBruta) : null;
-            const historico = (item?.historicoContato || '').toString();
-            return {
-                idLinha: item?.idLinha,
-                dono: (item?.dono || '').toString(),
-                descricao: (item?.descricao || '').toString(),
-                telefone: (item?.telefone || '').toString(),
-                encontrado: Boolean(item?.encontrado),
-                encontradoTexto: item?.encontradoTexto || (item?.encontrado ? 'Sim' : 'Não'),
-                dataGuarda: dataObjeto && !isNaN(dataObjeto.getTime()) ? dataObjeto : null,
-                dataGuardaTexto: item?.dataGuardaTexto || (dataObjeto ? formatarData(dataObjeto) : '-'),
-                historicoContato: historico,
-                ultimaLigacao: obterUltimaLigacao(historico)
-            };
-        }
-        function obterUltimaLigacao(historicoTexto) {
-            if (!historicoTexto) return '';
-            const partes = historicoTexto.split(/\n+/).map(linha => linha.trim()).filter(Boolean);
-            return partes.length ? partes[partes.length - 1] : '';
-        }
-        function atualizarResumoAchados(lista = []) {
-            const alvo = obterEstadoAchados();
-            const pendentes = lista.filter(item => !item.encontrado).length;
-            const encontrados = lista.filter(item => item.encontrado).length;
-            alvo.resumo = { pendentes, encontrados };
-            if (elementos.achadosTotalPendentes) elementos.achadosTotalPendentes.textContent = pendentes;
-            if (elementos.achadosTotalEncontrados) elementos.achadosTotalEncontrados.textContent = encontrados;
-            if (elementos.achadosCardPendentes) {
-                elementos.achadosCardPendentes.classList.toggle('highlight', pendentes > 0);
-            }
-            if (elementos.achadosCardEncontrados) {
-                elementos.achadosCardEncontrados.classList.toggle('highlight', encontrados > 0);
-            }
-        }
-        function aplicarFiltrosAchados(lista) {
-            const alvo = obterEstadoAchados();
-            const { busca, status, dataInicio, dataFim } = alvo.filtros;
-            const buscaNormalizada = normalizarTextoBusca(busca);
-            const inicio = dataInicio ? new Date(dataInicio) : null;
-            const fim = dataFim ? new Date(dataFim) : null;
-
-            return lista.filter(item => {
-                if (status === 'pendentes' && item.encontrado) return false;
-                if (status === 'encontrados' && !item.encontrado) return false;
-
-                if (inicio && item.dataGuarda && item.dataGuarda < inicio) return false;
-                if (fim && item.dataGuarda && item.dataGuarda > fim) return false;
-
-                if (buscaNormalizada) {
-                    const alvoBusca = [item.dono, item.descricao, item.telefone, item.historicoContato]
-                        .map(valor => normalizarTextoBusca(valor)).join(' ');
-                    if (!alvoBusca.includes(buscaNormalizada)) return false;
-                }
-                return true;
-            });
-        }
-        function atualizarEstadoTabelaAchados() {
-            const alvo = obterEstadoAchados();
-            const carregando = alvo.carregando;
-            if (elementos.achadosLoading) elementos.achadosLoading.hidden = !carregando;
-            if (elementos.tabelaAchadosBody) elementos.tabelaAchadosBody.closest('table').hidden = carregando;
-        }
-        function renderizarTabelaAchados() {
-            const alvo = obterEstadoAchados();
-            if (!elementos.tabelaAchadosBody) return;
-
-            const filtrados = aplicarFiltrosAchados(alvo.itens);
-            elementos.tabelaAchadosBody.innerHTML = '';
-
-            filtrados.forEach(item => {
-                const linha = document.createElement('tr');
-
-                const statusPill = document.createElement('span');
-                statusPill.className = 'lf-pill';
-                statusPill.innerHTML = `<i class="fas ${item.encontrado ? 'fa-circle-check' : 'fa-clock'}"></i> ${item.encontrado ? 'Encontrado' : 'Aguardando'}`;
-
-                const ultimaLigacao = item.ultimaLigacao || '-';
-                const tdAcoes = document.createElement('td');
-                tdAcoes.className = 'lf-actions';
-
-                const btnLigar = document.createElement('button');
-                btnLigar.type = 'button';
-                btnLigar.className = 'btn btn-ghost';
-                btnLigar.innerHTML = '<i class="fas fa-phone"></i> Registrar ligação';
-                btnLigar.addEventListener('click', () => registrarLigacaoAchado(item));
-
-                const btnEditar = document.createElement('button');
-                btnEditar.type = 'button';
-                btnEditar.className = 'btn btn-ghost';
-                btnEditar.innerHTML = '<i class="fas fa-pen"></i> Editar';
-                btnEditar.addEventListener('click', () => abrirModalAchado(item));
-
-                const btnEncontrado = document.createElement('button');
-                btnEncontrado.type = 'button';
-                btnEncontrado.className = 'btn btn-primary';
-                btnEncontrado.innerHTML = `<i class="fas ${item.encontrado ? 'fa-rotate-left' : 'fa-check'}"></i> ${item.encontrado ? 'Reabrir' : 'Marcar encontrado'}`;
-                btnEncontrado.addEventListener('click', () => confirmarAlternarStatusAchado(item, btnEncontrado));
-
-                const btnExcluir = document.createElement('button');
-                btnExcluir.type = 'button';
-                btnExcluir.className = 'btn btn-ghost btn-danger-outline';
-                btnExcluir.innerHTML = '<i class="fas fa-trash"></i> Excluir';
-                btnExcluir.addEventListener('click', () => confirmarExcluirAchado(item, btnExcluir));
-
-                tdAcoes.append(btnLigar, btnEditar, btnEncontrado, btnExcluir);
-
-                linha.appendChild(criarCelulaTexto(item.dono || '-', 'Dono do pertence'));
-                linha.appendChild(criarCelulaTexto(item.dataGuardaTexto || '-', 'Data da guarda'));
-                linha.appendChild(criarCelulaTexto(item.descricao || '-', 'Descrição'));
-                linha.appendChild(criarCelulaTexto(item.telefone || '-', 'Telefone'));
-
-                const tdStatus = document.createElement('td');
-                tdStatus.dataset.label = 'Encontrado?';
-                tdStatus.appendChild(statusPill);
-                linha.appendChild(tdStatus);
-                linha.appendChild(criarCelulaTexto(ultimaLigacao || '-', 'Última ligação'));
-                tdAcoes.dataset.label = 'Ações';
-                linha.appendChild(tdAcoes);
-
-                elementos.tabelaAchadosBody.appendChild(linha);
-            });
-
-            atualizarResumoAchados(alvo.itens);
-
-            if (elementos.achadosEmpty) {
-                elementos.achadosEmpty.hidden = filtrados.length > 0 || alvo.carregando;
-            }
-            if (elementos.achadosLoading) {
-                elementos.achadosLoading.hidden = !alvo.carregando;
-            }
-            if (elementos.tabelaAchadosBody) {
-                elementos.tabelaAchadosBody.closest('table').hidden = alvo.carregando;
-            }
-            if (elementos.achadosResumo) {
-                elementos.achadosResumo.textContent = `${filtrados.length} de ${alvo.itens.length} registros`;
-            }
-            if (elementos.achadosFiltroAplicado) {
-                const filtros = [];
-                if (alvo.filtros.status !== 'todos') filtros.push(`Status: ${alvo.filtros.status === 'pendentes' ? 'Aguardando' : 'Encontrados'}`);
-                if (alvo.filtros.busca) filtros.push(`Busca: ${alvo.filtros.busca}`);
-                if (alvo.filtros.dataInicio || alvo.filtros.dataFim) {
-                    const inicio = alvo.filtros.dataInicio ? formatarData(alvo.filtros.dataInicio) : 'início';
-                    const fim = alvo.filtros.dataFim ? formatarData(alvo.filtros.dataFim) : 'hoje';
-                    filtros.push(`Período: ${inicio} a ${fim}`);
-                }
-                elementos.achadosFiltroAplicado.textContent = filtros.join(' | ');
-            }
-        }
-        function criarCelulaTexto(texto, rotulo) {
-            const td = document.createElement('td');
-            td.textContent = texto;
-            if (rotulo) {
-                td.dataset.label = rotulo;
-            }
-            return td;
-        }
-        async function carregarAchados({ forcarAtualizacao = false } = {}) {
-            const alvo = obterEstadoAchados();
-            if (!estado.autenticado) return false;
-            if (alvo.carregando) return false;
-            if (alvo.itens.length && !forcarAtualizacao) {
-                renderizarTabelaAchados();
-                return true;
-            }
-            alvo.carregando = true;
-            atualizarEstadoTabelaAchados();
-            try {
-                const resposta = await callGoogleScript('getPertencesPerdidos');
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Não foi possível carregar os pertences');
-                }
-                const itens = Array.isArray(resposta.dados) ? resposta.dados.map(mapearItemAchado) : [];
-                alvo.itens = itens;
-                renderizarTabelaAchados();
-                return true;
-            } catch (erro) {
-                mostrarErro('Erro ao carregar achados e perdidos');
-                console.error(erro);
-                return false;
-            } finally {
-                alvo.carregando = false;
-                atualizarEstadoTabelaAchados();
-            }
-        }
-        function limparFormularioAchado() {
-            if (elementos.achadoForm) elementos.achadoForm.reset();
-            if (elementos.achadoId) elementos.achadoId.value = '';
-            if (elementos.achadoStatusSelect) elementos.achadoStatusSelect.value = 'nao';
-            if (elementos.achadoHistorico) elementos.achadoHistorico.value = '';
-        }
-        function preencherFormularioAchado(item) {
-            if (!item) return;
-            if (elementos.achadoId) elementos.achadoId.value = item.idLinha || '';
-            if (elementos.achadoDono) elementos.achadoDono.value = item.dono || '';
-            if (elementos.achadoDescricao) elementos.achadoDescricao.value = item.descricao || '';
-            if (elementos.achadoTelefone) elementos.achadoTelefone.value = item.telefone || '';
-            if (elementos.achadoStatusSelect) elementos.achadoStatusSelect.value = item.encontrado ? 'sim' : 'nao';
-            if (elementos.achadoData) {
-                const isoData = item.dataGuarda instanceof Date && !Number.isNaN(item.dataGuarda.getTime())
-                    ? item.dataGuarda.toISOString().slice(0, 10)
-                    : '';
-                elementos.achadoData.value = isoData;
-            }
-            if (elementos.achadoHistorico) elementos.achadoHistorico.value = item.historicoContato || '';
-        }
-        function abrirModalAchado(item) {
-            garantirPortaisCabecalho();
-            limparFormularioAchado();
-            if (elementos.achadoModalTitle) {
-                elementos.achadoModalTitle.textContent = item ? 'Editar pertence' : 'Registrar pertence';
-            }
-            if (item) {
-                preencherFormularioAchado(item);
-            }
-            if (elementos.achadoModal && elementos.achadoModal.style.display !== 'flex') {
-                travaRolagem.aplicar();
-                elementos.achadoModal.style.display = 'flex';
-            }
-        }
-        function fecharModalAchado() {
-            if (elementos.achadoModal && elementos.achadoModal.style.display === 'flex') {
-                travaRolagem.remover();
-                elementos.achadoModal.style.display = 'none';
-            }
-        }
-        async function salvarAchado(event) {
-            if (event) event.preventDefault();
-            if (!elementos.achadoForm) return;
-            const alvo = obterEstadoAchados();
-            if (alvo.salvando) return;
-            const id = elementos.achadoId?.value || '';
-            const payload = {
-                idLinha: id,
-                dono: elementos.achadoDono?.value?.trim(),
-                descricao: elementos.achadoDescricao?.value?.trim(),
-                telefone: elementos.achadoTelefone?.value?.trim(),
-                dataGuarda: elementos.achadoData?.value || '',
-                encontrado: (elementos.achadoStatusSelect?.value || 'nao') === 'sim',
-                historicoContato: elementos.achadoHistorico?.value || ''
-            };
-
-            const botaoSalvar = elementos.achadoBtnCancelar?.nextElementSibling || elementos.achadoForm.querySelector('button[type="submit"]');
-            const finalizar = botaoSalvar ? iniciarLoadingBotao(botaoSalvar) : () => {};
-            if (botaoSalvar) botaoSalvar.disabled = true;
-            alvo.salvando = true;
-            try {
-                const acao = id ? 'atualizarPertencePerdido' : 'cadastrarPertencePerdido';
-                // Evita envios duplicados em caso de falha de comunicação
-                // ao limitar a chamada a uma única tentativa.
-                const resposta = await callGoogleScript(acao, payload, { tentativas: 1 });
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Falha ao salvar');
-                }
-                mostrarSucesso('Registro salvo com sucesso.');
-                fecharModalAchado();
-                await carregarAchados({ forcarAtualizacao: true });
-            } catch (erro) {
-                console.error(erro);
-                mostrarErro('Não foi possível salvar o pertence.');
-            } finally {
-                alvo.salvando = false;
-                if (botaoSalvar) botaoSalvar.disabled = false;
-                finalizar();
-            }
-        }
-        async function confirmarExcluirAchado(item, botaoAcao) {
-            if (!item || !item.idLinha) return;
-            const resultado = await Swal.fire({
-                title: 'Excluir pertence?',
-                text: 'Essa ação remove o registro da planilha.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sim, excluir',
-                cancelButtonText: 'Cancelar'
-            });
-            if (resultado.isDismissed) return;
-
-            const finalizarLoading = iniciarLoadingBotao(botaoAcao);
-            if (botaoAcao) botaoAcao.setAttribute('aria-busy', 'true');
-            try {
-                await excluirAchado(item);
-            } finally {
-                if (botaoAcao) botaoAcao.removeAttribute('aria-busy');
-                finalizarLoading();
-            }
-        }
-        async function excluirAchado(item) {
-            try {
-                const resposta = await callGoogleScript('excluirPertencePerdido', { idLinha: item.idLinha }, { tentativas: 1 });
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Falha ao excluir pertence');
-                }
-                mostrarSucesso('Pertence excluído.');
-                await carregarAchados({ forcarAtualizacao: true });
-                return true;
-            } catch (erro) {
-                console.error(erro);
-                mostrarErro('Não foi possível excluir o pertence.');
-                return false;
-            }
-        }
-        async function confirmarAlternarStatusAchado(item, botaoAcao) {
-            if (!item) return;
-            const marcarEncontrado = !item.encontrado;
-            const resultado = await Swal.fire({
-                title: marcarEncontrado ? 'Confirmar devolução?' : 'Reabrir pertence?',
-                text: marcarEncontrado
-                    ? 'Confirme que o pertence foi devolvido ao dono.'
-                    : 'O pertence voltará a ficar como aguardando retirada.',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: marcarEncontrado ? 'Sim, marcar encontrado' : 'Sim, reabrir',
-                cancelButtonText: 'Cancelar'
-            });
-            if (resultado.isDismissed) return;
-
-            const finalizarLoading = iniciarLoadingBotao(botaoAcao);
-            if (botaoAcao) botaoAcao.setAttribute('aria-busy', 'true');
-            try {
-                await alternarEncontradoAchado(item, marcarEncontrado);
-            } finally {
-                if (botaoAcao) botaoAcao.removeAttribute('aria-busy');
-                finalizarLoading();
-            }
-        }
-        async function alternarEncontradoAchado(item, novoValor) {
-            if (!item || !item.idLinha) return false;
-            try {
-                const resposta = await callGoogleScript('atualizarPertencePerdido', { idLinha: item.idLinha, encontrado: novoValor });
-                if (!resposta.success) {
-                    throw new Error(resposta.error || 'Falha ao atualizar pertence');
-                }
-                mostrarSucesso(novoValor ? 'Pertence marcado como encontrado.' : 'Pertence reaberto.');
-                await carregarAchados({ forcarAtualizacao: true });
-                return true;
-            } catch (erro) {
-                console.error(erro);
-                mostrarErro('Não foi possível atualizar o status.');
-                return false;
-            }
-        }
-        async function registrarLigacaoAchado(item) {
-            if (!item || !item.idLinha) return;
-            const resultado = await Swal.fire({
-                title: 'Registrar ligação',
-                input: 'textarea',
-                inputLabel: 'Anote o que foi conversado',
-                inputPlaceholder: 'Ex.: Liguei para Maria, informou que busca amanhã às 10h',
-                confirmButtonText: 'Registrar',
-                cancelButtonText: 'Cancelar',
-                showCancelButton: true
-            });
-            if (resultado.isDismissed) return;
-            const anotacao = (resultado.value || '').toString();
-            const resposta = await callGoogleScript('registrarContatoPertence', {
-                idLinha: item.idLinha,
-                anotacao
-            });
-            if (!resposta.success) {
-                mostrarErro('Não foi possível registrar a ligação.');
-                return;
-            }
-            mostrarSucesso('Ligação registrada.');
-            await carregarAchados({ forcarAtualizacao: true });
-        }
         function obterFiltrosAtivosDashboard() {
             if (!Array.isArray(estado.filtrosSelecionados) || estado.filtrosSelecionados.length === 0) {
                 estado.filtrosSelecionados = ['todos'];
@@ -4606,6 +4397,13 @@
                 const filtro = normalizarTexto(botao.dataset.filter) || 'todos';
                 botao.classList.toggle('active', ativos.includes(filtro));
             });
+            // Os chips do Estado Geral também mostram o filtro ativo — no
+            // celular eles são a única fileira de filtros visível.
+            if (elementos.cardsHero) {
+                elementos.cardsHero.querySelectorAll('.card[data-filter]').forEach(chip => {
+                    chip.classList.toggle('is-active', ativos.includes(normalizarTexto(chip.dataset.filter)));
+                });
+            }
         }
         function alternarFiltroDashboard(filtroSelecionado) {
             const filtroNormalizado = normalizarTexto(filtroSelecionado);
@@ -4633,7 +4431,12 @@
             if (!filtroNormalizado) return;
             const permitidos = new Set(obterFiltrosPermitidosPorPerfil());
             if (!permitidos.has(filtroNormalizado)) return;
-            estado.filtrosSelecionados = [filtroNormalizado];
+            // Toque no chip já ativo desfaz o filtro (volta para "todos") —
+            // essencial no celular, onde a fileira com "Todos" fica oculta.
+            const atuais = obterFiltrosAtivosDashboard().map(normalizarTexto);
+            estado.filtrosSelecionados = (atuais.length === 1 && atuais[0] === filtroNormalizado)
+                ? ['todos']
+                : [filtroNormalizado];
             atualizarBotoesFiltroDashboard();
             renderizarArmarios();
         }
@@ -4672,6 +4475,14 @@
             const statusNormalizado = normalizarTexto(armario.status);
             return numeroNormalizado.startsWith('contingencia') || statusNormalizado === 'contingencia';
         }
+        function obterRotuloCurtoArmario(armario) {
+            const numero = (armario?.numero || '').toString();
+            if (armarioEhContingencia(armario)) {
+                const match = numero.match(/(\d+)\s*$/);
+                return match ? `C${match[1]}` : 'C';
+            }
+            return numero;
+        }
         let renderizarArmariosVersao = 0;
         let renderizarArmariosAgendamento = null;
         function cancelarRenderizacaoArmarios() {
@@ -4704,11 +4515,17 @@
             if (elementos.dashboardSearch && elementos.dashboardSearch.value !== (estado.buscaDashboard || '')) {
                 elementos.dashboardSearch.value = estado.buscaDashboard || '';
             }
+            if (elementos.buscaFlutuanteInput && elementos.buscaFlutuanteInput.value !== (estado.buscaDashboard || '')) {
+                elementos.buscaFlutuanteInput.value = estado.buscaDashboard || '';
+                if (elementos.buscaFlutuanteLimpar) {
+                    elementos.buscaFlutuanteLimpar.classList.toggle('visible', (estado.buscaDashboard || '').trim().length > 0);
+                }
+            }
             const perfilNormalizado = normalizarTexto(estado.perfilAtual);
             const unidadeFiltroNormalizado = normalizarTexto(estado.unidadeAtual);
             const filtrosAtivos = obterFiltrosAtivosDashboard();
             const termoBusca = estado.buscaDashboard;
-            let armariosParaExibir = estado.armarios
+            const armariosParaExibir = estado.armarios
                 .filter(a => {
                     const tipoNormalizado = normalizarTexto(a.tipo);
                     const correspondePerfil = perfilNormalizado === 'geral' || perfilNormalizado === 'todos' || tipoNormalizado === perfilNormalizado;
@@ -4718,18 +4535,8 @@
                 .filter(a => !(armarioEhContingencia(a) && normalizarTexto(a.status) === 'livre'))
                 .filter(a => armarioPassaNosFiltrosSelecionados(a, filtrosAtivos))
                 .filter(armario => !termoBusca || armarioCorrespondeBusca(armario, termoBusca));
-            
-            const isResumoMode = (!termoBusca && (!filtrosAtivos || filtrosAtivos.length === 0 || (filtrosAtivos.length === 1 && filtrosAtivos[0] === 'todos')));
 
-            const prioridadeStatusDashboard = { livre: 0, vencido: 1, proximo: 2, contingencia: 3, 'em-uso': 4 };
-            armariosParaExibir.sort((a, b) => {
-                const statusA = armarioEhContingencia(a) ? 'contingencia' : a.status;
-                const statusB = armarioEhContingencia(b) ? 'contingencia' : b.status;
-                const prioridadeA = prioridadeStatusDashboard[statusA] ?? 5;
-                const prioridadeB = prioridadeStatusDashboard[statusB] ?? 5;
-                if (prioridadeA !== prioridadeB) return prioridadeA - prioridadeB;
-                return (a.numero || '').localeCompare(b.numero || '', 'pt-BR', { numeric: true });
-            });
+            armariosParaExibir.sort((a, b) => (a.numero || '').localeCompare(b.numero || '', 'pt-BR', { numeric: true }));
 
             const criarCardArmario = (armario) => {
                 const card = document.createElement('div');
@@ -4739,7 +4546,7 @@
                 if (armario.visitaEstendida) {
                     card.classList.add('visita-estendida');
                 }
-                const statusTexto = armarioEhContingencia(armario)
+                const statusTexto = classeStatus === 'contingencia'
                     ? 'Contingência'
                     : armario.status === 'livre'
                         ? 'Livre'
@@ -4749,7 +4556,7 @@
                                 ? 'Próximo'
                                 : 'Vencido';
                 const statusIcones = {
-                    livre: 'fas fa-check',
+                    livre: 'fas fa-key',
                     'em-uso': 'fas fa-user-clock',
                     proximo: 'fas fa-exclamation-triangle',
                     vencido: 'fas fa-times-circle',
@@ -4758,53 +4565,77 @@
                 const statusIcone = statusIcones[classeStatus] || 'fas fa-circle';
                 const ehLivre = classeStatus === 'livre';
                 const nomePaciente = armario.nomePaciente || '-';
+                const tipoLabel = normalizarTexto(armario.tipo) === 'acompanhante' ? 'Acompanhante' : 'Visitante';
+                const subLinha = classeStatus === 'contingencia'
+                    ? 'Acesso de contingência'
+                    : ehLivre
+                        ? 'Pronto para uso'
+                        : `${tipoLabel}${armario.horaInicio ? ` • desde ${armario.horaInicio}` : ''}`;
+                const rotuloPrimario = ehLivre ? 'Abrir agora' : 'Liberar';
+                const rotuloCurto = obterRotuloCurtoArmario(armario);
+                const numeroSeguro = escaparHtml(armario.numero || '');
+                const nomePacienteSeguro = escaparHtml(nomePaciente);
                 card.innerHTML = `
-                    <div class="armario-status-bar status-${classeStatus}" aria-hidden="true"></div>
-                    <div class="armario-header minimal">
-                        <div class="armario-identificacao">
-                            <span class="armario-number prominent">${armario.numero}</span>
+                    <div class="armario-status-bar" aria-hidden="true"></div>
+                    <div class="armario-card-top">
+                        <span class="armario-number prominent" title="${numeroSeguro}">${escaparHtml(rotuloCurto)}</span>
+                        <span class="armario-status-pill">
+                            <span class="armario-status-dot" aria-hidden="true"></span>${statusTexto}
+                        </span>
+                    </div>
+                    <div class="armario-card-info">
+                        <div class="armario-status-icon status-${classeStatus}" aria-hidden="true">
+                            <i class="${statusIcone}"></i>
                         </div>
-                        <div class="armario-status-icon status-${classeStatus}" aria-label="${statusTexto}">
-                            <i class="${statusIcone}" aria-hidden="true"></i>
-                            <span class="sr-only">${statusTexto}</span>
+                        <div class="armario-card-textos">
+                            <span class="armario-card-nome" title="${ehLivre ? statusTexto : nomePacienteSeguro}">${ehLivre ? 'Disponível' : nomePacienteSeguro}</span>
+                            <span class="armario-card-sub">${escaparHtml(subLinha)}</span>
                         </div>
                     </div>
-                    ${ehLivre ? '' : `<div class="armario-paciente-line" title="${nomePaciente}">${nomePaciente}</div>`}
+                    <div class="armario-card-actions">
+                        <button type="button" class="armario-card-btn consultar" data-acao="consultar" aria-label="Consultar armário ${numeroSeguro}">Consultar</button>
+                        <button type="button" class="armario-card-btn abrir" data-acao="abrir" aria-label="${rotuloPrimario} armário ${numeroSeguro}">${rotuloPrimario}</button>
+                    </div>
                 `;
+                const botaoConsultar = card.querySelector('[data-acao="consultar"]');
+                const botaoAbrir = card.querySelector('[data-acao="abrir"]');
+                if (botaoConsultar) {
+                    botaoConsultar.addEventListener('click', event => {
+                        event.stopPropagation();
+                        abrirConsultaArmario(armario);
+                    });
+                }
+                if (botaoAbrir) {
+                    botaoAbrir.addEventListener('click', event => {
+                        event.stopPropagation();
+                        executarAcaoPrimariaArmario(armario);
+                    });
+                }
                 card.addEventListener('click', () => abrirModalArmario(armario));
                 return card;
             };
 
-            const resumoContainer = document.getElementById('resumo-panels-container');
-            const gridWrapper = document.getElementById('armarios-grid-wrapper');
-            const containerLivres = document.getElementById('container-resumo-livres');
-            const containerOcupados = document.getElementById('container-resumo-ocupados');
+            const criarDivisorOcupados = () => {
+                const divisor = document.createElement('div');
+                divisor.className = 'armarios-divisor';
+                divisor.innerHTML = '<span>Ocupados</span>';
+                return divisor;
+            };
+            const indicePrimeiroOcupado = armariosParaExibir.findIndex(
+                a => (armarioEhContingencia(a) ? 'contingencia' : a.status) !== 'livre'
+            );
 
-            if (resumoContainer && gridWrapper) {
-                if (isResumoMode) {
-                    resumoContainer.style.display = 'flex';
-                    gridWrapper.style.display = 'none';
-                    if (containerLivres) containerLivres.innerHTML = '';
-                    if (containerOcupados) containerOcupados.innerHTML = '';
-                    
-                    const livres = armariosParaExibir.filter(a => a.status === 'livre').slice(0, 5);
-                    const ocupados = armariosParaExibir.filter(a => a.status !== 'livre')
-                        .sort((a, b) => {
-                            const pesoA = normalizarTexto(a.tipo) === 'acompanhante' ? 1 : 0;
-                            const pesoB = normalizarTexto(b.tipo) === 'acompanhante' ? 1 : 0;
-                            return pesoB - pesoA;
-                        }).slice(0, 5);
-                        
-                    if (containerLivres && containerOcupados) {
-                        livres.forEach(a => containerLivres.appendChild(criarCardArmario(a)));
-                        ocupados.forEach(a => containerOcupados.appendChild(criarCardArmario(a)));
+            if (opcoes.imediato) {
+                const fragment = document.createDocumentFragment();
+                armariosParaExibir.forEach((armario, index) => {
+                    if (index === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
+                        fragment.appendChild(criarDivisorOcupados());
                     }
-                    renderizarArmariosAgendamento = null;
-                    return;
-                } else {
-                    resumoContainer.style.display = 'none';
-                    gridWrapper.style.display = 'block';
-                }
+                    fragment.appendChild(criarCardArmario(armario));
+                });
+                elementos.armariosContainer.appendChild(fragment);
+                renderizarArmariosAgendamento = null;
+                return;
             }
 
             const processarLote = (deadline) => {
@@ -4816,6 +4647,9 @@
                     itensProcessados < tamanhoLote &&
                     armariosParaExibir[renderizarArmarios.indiceAtual]
                 ) {
+                    if (renderizarArmarios.indiceAtual === indicePrimeiroOcupado && indicePrimeiroOcupado > 0) {
+                        elementos.armariosContainer.appendChild(criarDivisorOcupados());
+                    }
                     elementos.armariosContainer.appendChild(
                         criarCardArmario(armariosParaExibir[renderizarArmarios.indiceAtual])
                     );
@@ -4860,6 +4694,15 @@
                     return;
                 }
 
+                // Contingências são identificadas como os cards do Monitor (flag,
+                // número ou status) e as livres ficam de fora, como na listagem.
+                if (armarioEhContingencia(armario)) {
+                    if (normalizarTexto(armario.status) !== 'livre') {
+                        totais.contingencia += 1;
+                    }
+                    return;
+                }
+
                 switch (armario.status) {
                     case 'livre':
                         totais.livres += 1;
@@ -4869,9 +4712,6 @@
                         break;
                     case 'proximo':
                         totais.proximo += 1;
-                        break;
-                    case 'contingencia':
-                        totais.contingencia += 1;
                         break;
                     case 'vencido':
                         totais.vencidos += 1;
@@ -5107,12 +4947,6 @@
                     case 'historico-acompanhantes':
                         await carregarHistoricoAcompanhantes();
                         break;
-                    case 'liberacao':
-                        await carregarTabelaLiberacao();
-                        break;
-                    case 'achados-perdidos':
-                        await carregarAchados({ forcarAtualizacao: true });
-                        break;
                     case 'termo-responsabilidade':
                         await carregarTabelaTermos({ recarregarArmarios });
                         break;
@@ -5131,269 +4965,137 @@
                     case 'registros-imagens':
                         await carregarTabelaRegistrosImagens();
                         break;
+                    case 'backup':
+                        await carregarListaBackups();
+                        break;
                 }
             } catch (error) {
                 console.error('Erro ao carregar dados da tabela:', error);
                 mostrarErro('Erro ao carregar dados');
             }
         }
-        function mostrarEstadoTabelaLiberacao(mensagem, tipo = 'empty') {
-            const tbody = elementos.tabelaLiberacaoBody;
-            if (!tbody) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            const colunas = Math.max(
-                estadoLiberacao.colunas?.length || estadoLiberacao.linhas?.[0]?.length || 0,
-                7
-            );
-            const tr = document.createElement('tr');
-            const td = document.createElement('td');
-            td.colSpan = colunas;
-            if (tipo === 'loading') {
-                td.className = 'table-loading';
-            } else if (tipo === 'error') {
-                td.className = 'table-error';
-            } else {
-                td.className = 'table-empty';
+        // === Filtros de lista (busca + selects) + estados vazio/carregando + contador ===
+        const configFiltrosLista = {
+            visitantes: {
+                tabela: 'tabela-visitantes', busca: 'visitantes-busca',
+                contador: 'visitantes-contador', vazio: 'visitantes-vazio', carregando: 'visitantes-carregando',
+                selects: [{ id: 'visitantes-filtro-status', attr: 'status' }],
+                rotulo: ['armário', 'armários'],
+            },
+            acompanhantes: {
+                tabela: 'tabela-acompanhantes', busca: 'acompanhantes-busca',
+                contador: 'acompanhantes-contador', vazio: 'acompanhantes-vazio', carregando: 'acompanhantes-carregando',
+                selects: [{ id: 'acompanhantes-filtro-status', attr: 'status' }],
+                rotulo: ['armário', 'armários'],
+            },
+            'cadastro-armarios': {
+                tabela: 'tabela-cadastro-armarios', busca: 'cadastro-armarios-busca',
+                contador: 'cadastro-armarios-contador', vazio: 'cadastro-armarios-vazio', carregando: 'cadastro-armarios-carregando',
+                selects: [
+                    { id: 'cadastro-armarios-filtro-tipo', attr: 'tipo' },
+                    { id: 'cadastro-armarios-filtro-status', attr: 'status' },
+                ],
+                rotulo: ['armário', 'armários'],
+            },
+            'cadastro-unidades': {
+                tabela: 'tabela-unidades', busca: 'cadastro-unidades-busca',
+                contador: 'cadastro-unidades-contador', vazio: 'cadastro-unidades-vazio', carregando: 'cadastro-unidades-carregando',
+                selects: [{ id: 'cadastro-unidades-filtro-status', attr: 'status' }],
+                rotulo: ['unidade', 'unidades'],
+            },
+            usuarios: {
+                tabela: 'tabela-usuarios', busca: 'usuarios-busca',
+                contador: 'usuarios-contador', vazio: 'usuarios-vazio', carregando: 'usuarios-carregando',
+                selects: [
+                    { id: 'usuarios-filtro-perfil', attr: 'perfil' },
+                    { id: 'usuarios-filtro-status', attr: 'status' },
+                ],
+                rotulo: ['usuário', 'usuários'],
+            },
+        };
+        function definirCarregandoLista(nome, carregando) {
+            const cfg = configFiltrosLista[nome];
+            if (!cfg) return;
+            const tabela = document.getElementById(cfg.tabela);
+            const carregandoEl = document.getElementById(cfg.carregando);
+            const vazioEl = document.getElementById(cfg.vazio);
+            const contadorEl = document.getElementById(cfg.contador);
+            const cardList = tabela?.parentElement?.querySelector('.table-card-list');
+            if (carregandoEl) carregandoEl.classList.toggle('is-visible', !!carregando);
+            if (carregando) {
+                if (vazioEl) vazioEl.classList.remove('is-visible');
+                if (tabela) tabela.style.display = 'none';
+                if (cardList) cardList.classList.add('is-hidden-empty');
+                if (contadorEl) contadorEl.textContent = '';
             }
-            td.textContent = mensagem;
-            tr.appendChild(td);
-            tbody.innerHTML = '';
-            tbody.appendChild(tr);
         }
-        function atualizarResumoLiberacao() {
-            const resumoEl = elementos.liberacaoResumo;
-            if (!resumoEl) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            if (estadoLiberacao.carregando) {
-                resumoEl.textContent = 'Carregando registros de liberação...';
-                return;
-            }
-            if (estadoLiberacao.erro) {
-                resumoEl.textContent = estadoLiberacao.erro;
-                return;
-            }
-            if (!estadoLiberacao.linhasCarregadas) {
-                resumoEl.textContent = 'Selecione um período para visualizar os registros de liberação.';
-                return;
-            }
-            const filtros = estadoLiberacao.filtros || {};
-            let periodoDescricao = '';
-            if (filtros.dataInicio && filtros.dataFim) {
-                periodoDescricao = filtros.dataInicio === filtros.dataFim
-                    ? formatarData(filtros.dataInicio)
-                    : `${formatarData(filtros.dataInicio)} a ${formatarData(filtros.dataFim)}`;
-            }
-            const detalhes = [];
-            if (periodoDescricao) {
-                detalhes.push(`Período: ${periodoDescricao}`);
-            }
-            if (filtros.prontuario) {
-                detalhes.push(`Prontuário: ${filtros.prontuario}`);
-            }
-            if (filtros.paciente) {
-                detalhes.push(`Paciente: ${filtros.paciente}`);
-            }
-            if (!estadoLiberacao.totalFiltrado) {
-                resumoEl.textContent = detalhes.length
-                    ? `Nenhum registro encontrado (${detalhes.join(' • ')}).`
-                    : 'Nenhum registro encontrado para o período selecionado.';
-                return;
-            }
-            const horaAtualizacao = estadoLiberacao.ultimaAtualizacao
-                ? new Date(estadoLiberacao.ultimaAtualizacao)
-                : new Date();
-            const horaFormatada = horaAtualizacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            const totalPlanilha = estadoLiberacao.totalPlanilha || estadoLiberacao.totalFiltrado;
-            const prefixo = `${estadoLiberacao.totalFiltrado} de ${totalPlanilha} registros exibidos`;
-            const detalhesTexto = detalhes.length ? `${detalhes.join(' • ')} • ` : '';
-            resumoEl.textContent = `${prefixo} • ${detalhesTexto}Atualizado às ${horaFormatada}`;
-        }
-        function renderizarTabelaLiberacao() {
-            const headRow = elementos.tabelaLiberacaoHead;
-            const tbody = elementos.tabelaLiberacaoBody;
-            if (!headRow || !tbody) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            const colunas = Array.isArray(estadoLiberacao.colunas) ? estadoLiberacao.colunas : [];
-            const linhas = Array.isArray(estadoLiberacao.linhas) ? estadoLiberacao.linhas : [];
-            const totalColunas = colunas.length || (linhas[0]?.length ?? 0);
-            headRow.innerHTML = '';
-            if (colunas.length) {
-                const fragmentHead = document.createDocumentFragment();
-                colunas.forEach(coluna => {
-                    const th = document.createElement('th');
-                    th.scope = 'col';
-                    th.textContent = coluna || '';
-                    fragmentHead.appendChild(th);
+        function aplicarFiltroLista(nome) {
+            const cfg = configFiltrosLista[nome];
+            if (!cfg) return;
+            const tabela = document.getElementById(cfg.tabela);
+            if (!tabela || !tabela.tBodies[0]) return;
+            const carregandoEl = document.getElementById(cfg.carregando);
+            if (carregandoEl) carregandoEl.classList.remove('is-visible');
+            const termo = normalizarTexto((document.getElementById(cfg.busca) || {}).value || '');
+            const selects = (cfg.selects || []).map(s => ({
+                attr: s.attr,
+                valor: normalizarTexto((document.getElementById(s.id) || {}).value || 'todos'),
+            }));
+            const linhas = Array.from(tabela.tBodies[0].rows);
+            let visiveis = 0;
+            linhas.forEach(tr => {
+                if (tr.dataset.placeholder === 'true') { tr.hidden = true; return; }
+                let ok = true;
+                selects.forEach(s => {
+                    if (s.valor && s.valor !== 'todos' && normalizarTexto(tr.dataset[s.attr] || '') !== s.valor) {
+                        ok = false;
+                    }
                 });
-                headRow.appendChild(fragmentHead);
-            }
-            tbody.innerHTML = '';
-            if (!linhas.length) {
-                mostrarEstadoTabelaLiberacao('Nenhum registro encontrado para o período selecionado.');
-                return;
-            }
-            const fragmentBody = document.createDocumentFragment();
-            linhas.forEach(linha => {
-                const tr = document.createElement('tr');
-                const limiteColunas = totalColunas || linha.length;
-                for (let i = 0; i < limiteColunas; i++) {
-                    const td = document.createElement('td');
-                    const valor = linha[i] !== undefined && linha[i] !== null ? linha[i] : '';
-                    td.textContent = valor;
-                    tr.appendChild(td);
+                if (ok && termo) {
+                    const alvo = normalizarTexto(tr.dataset.busca || tr.textContent || '');
+                    if (!alvo.includes(termo)) ok = false;
                 }
-                fragmentBody.appendChild(tr);
+                tr.hidden = !ok;
+                if (ok) visiveis += 1;
             });
-            tbody.appendChild(fragmentBody);
+            const vazioEl = document.getElementById(cfg.vazio);
+            const contadorEl = document.getElementById(cfg.contador);
+            const cardList = tabela.parentElement?.querySelector('.table-card-list');
+            const vazio = visiveis === 0;
+            if (vazioEl) vazioEl.classList.toggle('is-visible', vazio);
+            tabela.style.display = vazio ? 'none' : '';
+            if (cardList) cardList.classList.toggle('is-hidden-empty', vazio);
+            if (contadorEl) {
+                const [sing, plur] = cfg.rotulo || ['registro', 'registros'];
+                contadorEl.innerHTML = `<strong>${visiveis}</strong> ${visiveis === 1 ? sing : plur}`;
+            }
+            if (gerenciadorCartoesTabela) gerenciadorCartoesTabela.reconstruirTabelaPorId(cfg.tabela);
         }
-        function obterFiltrosLiberacaoDoFormulario() {
-            return {
-                dataInicio: converterDataTextoParaISO(elementos.liberacaoDataInicio?.value || ''),
-                dataFim: converterDataTextoParaISO(elementos.liberacaoDataFim?.value || ''),
-                paciente: elementos.liberacaoPaciente?.value?.trim() || '',
-                prontuario: elementos.liberacaoProntuario?.value?.trim() || ''
-            };
-        }
-        function sanearFiltrosLiberacao(filtros = {}) {
-            const padraoLocal = obterDataHoraLocalPadrao().data;
-            const paciente = (filtros.paciente || '').toString().trim();
-            const prontuario = (filtros.prontuario || '').toString().trim();
-            const filtroTextoAtivo = Boolean(paciente || prontuario);
-            let dataInicio = converterDataTextoParaISO(filtros.dataInicio || '') || '';
-            let dataFim = converterDataTextoParaISO(filtros.dataFim || '') || '';
-
-            if (!filtroTextoAtivo) {
-                if (dataInicio && !dataFim) {
-                    dataFim = dataInicio;
+        let filtrosListaInicializados = false;
+        function inicializarFiltrosLista() {
+            if (filtrosListaInicializados) return;
+            filtrosListaInicializados = true;
+            Object.entries(configFiltrosLista).forEach(([nome, cfg]) => {
+                const busca = document.getElementById(cfg.busca);
+                if (busca) {
+                    let debounce = null;
+                    busca.addEventListener('input', () => {
+                        if (debounce) clearTimeout(debounce);
+                        debounce = setTimeout(() => aplicarFiltroLista(nome), 160);
+                    });
                 }
-                if (dataFim && !dataInicio) {
-                    dataInicio = dataFim;
-                }
-                if (!dataInicio && !dataFim) {
-                    dataInicio = padraoLocal;
-                    dataFim = padraoLocal;
-                }
-            } else {
-                if (dataInicio && !dataFim) {
-                    dataFim = dataInicio;
-                }
-                if (dataFim && !dataInicio) {
-                    dataInicio = dataFim;
-                }
-            }
-
-            return { dataInicio, dataFim, paciente, prontuario };
-        }
-        function gerarChaveFiltroLiberacao(filtros = {}) {
-            return JSON.stringify({
-                dataInicio: filtros.dataInicio || '',
-                dataFim: filtros.dataFim || '',
-                paciente: normalizarTexto(filtros.paciente || ''),
-                prontuario: normalizarTexto(filtros.prontuario || '')
-            });
-        }
-        function sincronizarCamposFiltroLiberacao(filtros = {}) {
-            if (elementos.liberacaoDataInicio) {
-                elementos.liberacaoDataInicio.value = filtros.dataInicio || '';
-            }
-            if (elementos.liberacaoDataFim) {
-                elementos.liberacaoDataFim.value = filtros.dataFim || '';
-            }
-            if (elementos.liberacaoProntuario) {
-                elementos.liberacaoProntuario.value = filtros.prontuario || '';
-            }
-            if (elementos.liberacaoPaciente) {
-                elementos.liberacaoPaciente.value = filtros.paciente || '';
-            }
-        }
-        async function carregarTabelaLiberacao(opcoes = {}) {
-            const tabela = elementos.tabelaLiberacao;
-            if (!tabela) return;
-            const estadoLiberacao = obterEstadoLiberacao();
-            const { filtros: filtrosOverride, forcarAtualizacao = false } = opcoes;
-            const filtrosFormulario = obterFiltrosLiberacaoDoFormulario();
-            const filtrosAtuais = sanearFiltrosLiberacao({
-                dataInicio: filtrosOverride?.dataInicio ?? filtrosFormulario.dataInicio ?? estadoLiberacao.filtros?.dataInicio,
-                dataFim: filtrosOverride?.dataFim ?? filtrosFormulario.dataFim ?? estadoLiberacao.filtros?.dataFim,
-                paciente: filtrosOverride?.paciente ?? filtrosFormulario.paciente ?? estadoLiberacao.filtros?.paciente,
-                prontuario: filtrosOverride?.prontuario ?? filtrosFormulario.prontuario ?? estadoLiberacao.filtros?.prontuario
-            });
-            sincronizarCamposFiltroLiberacao(filtrosAtuais);
-            if (!filtrosAtuais.dataInicio || !filtrosAtuais.dataFim) {
-                estadoLiberacao.erro = 'Informe um período válido para realizar a busca.';
-                estadoLiberacao.linhasCarregadas = false;
-                estadoLiberacao.linhas = [];
-                mostrarEstadoTabelaLiberacao('Informe um período válido para realizar a busca.', 'error');
-                atualizarResumoLiberacao();
-                return;
-            }
-            if (filtrosAtuais.dataInicio > filtrosAtuais.dataFim) {
-                estadoLiberacao.erro = 'A data inicial não pode ser posterior à data final.';
-                estadoLiberacao.linhasCarregadas = false;
-                estadoLiberacao.linhas = [];
-                mostrarEstadoTabelaLiberacao('A data inicial não pode ser posterior à data final.', 'error');
-                atualizarResumoLiberacao();
-                return;
-            }
-            const chaveFiltroAtual = gerarChaveFiltroLiberacao(filtrosAtuais);
-            if (!forcarAtualizacao && estadoLiberacao.linhasCarregadas && estadoLiberacao.chaveFiltrosAplicados === chaveFiltroAtual) {
-                estadoLiberacao.filtros = filtrosAtuais;
-                atualizarResumoLiberacao();
-                renderizarTabelaLiberacao();
-                return;
-            }
-            estadoLiberacao.carregando = true;
-            estadoLiberacao.erro = '';
-            estadoLiberacao.filtros = filtrosAtuais;
-            estadoLiberacao.chaveFiltrosAplicados = chaveFiltroAtual;
-            atualizarResumoLiberacao();
-            mostrarEstadoTabelaLiberacao('Carregando registros...', 'loading');
-            try {
-                const resultado = await callGoogleScript('getPlanilhaLiberacao', {
-                    dataInicio: filtrosAtuais.dataInicio,
-                    dataFim: filtrosAtuais.dataFim,
-                    paciente: filtrosAtuais.paciente,
-                    prontuario: filtrosAtuais.prontuario
+                (cfg.selects || []).forEach(s => {
+                    const el = document.getElementById(s.id);
+                    if (el) el.addEventListener('change', () => aplicarFiltroLista(nome));
                 });
-                if (!resultado.success) {
-                    throw new Error(resultado.error || 'Falha ao obter dados.');
-                }
-                estadoLiberacao.colunas = Array.isArray(resultado.columns) ? resultado.columns : [];
-                estadoLiberacao.linhas = Array.isArray(resultado.rows) ? resultado.rows : [];
-                estadoLiberacao.totalPlanilha = Number(resultado.totalPlanilha) || estadoLiberacao.linhas.length;
-                estadoLiberacao.totalFiltrado = Number(resultado.totalFiltrado) || estadoLiberacao.linhas.length;
-                estadoLiberacao.ultimaAtualizacao = Date.now();
-                estadoLiberacao.linhasCarregadas = true;
-                const filtrosRetornados = sanearFiltrosLiberacao({
-                    dataInicio: resultado?.filtro?.dataInicio || filtrosAtuais.dataInicio,
-                    dataFim: resultado?.filtro?.dataFim || filtrosAtuais.dataFim,
-                    paciente: resultado?.filtro?.paciente ?? filtrosAtuais.paciente,
-                    prontuario: resultado?.filtro?.prontuario ?? filtrosAtuais.prontuario
-                });
-                estadoLiberacao.filtros = filtrosRetornados;
-                estadoLiberacao.chaveFiltrosAplicados = gerarChaveFiltroLiberacao(filtrosRetornados);
-                estadoLiberacao.erro = '';
-                sincronizarCamposFiltroLiberacao(filtrosRetornados);
-                renderizarTabelaLiberacao();
-            } catch (erro) {
-                console.error('Erro ao carregar dados de liberação:', erro);
-                estadoLiberacao.erro = 'Não foi possível carregar os registros de liberação.';
-                estadoLiberacao.linhas = [];
-                estadoLiberacao.linhasCarregadas = false;
-                estadoLiberacao.totalPlanilha = 0;
-                estadoLiberacao.totalFiltrado = 0;
-                mostrarEstadoTabelaLiberacao('Não foi possível carregar os registros de liberação.', 'error');
-                mostrarErro('Não foi possível carregar os registros de liberação.');
-            } finally {
-                estadoLiberacao.carregando = false;
-                atualizarResumoLiberacao();
-            }
+            });
         }
         async function carregarTabelaVisitantes(unidadeFiltro, opcoes = {}) {
             const { recarregarArmarios = true } = opcoes;
             const tbodyVisitantes = document.querySelector('#tabela-visitantes tbody');
             if (!tbodyVisitantes) return;
             if (recarregarArmarios || !estado.armariosCarregados) {
+                definirCarregandoLista('visitantes', true);
                 await carregarArmarios({ forcarAtualizacao: recarregarArmarios, incluirTermos: false });
             }
             tbodyVisitantes.innerHTML = '';
@@ -5402,12 +5104,10 @@
                 .filter(armario => normalizarTexto(armario.tipo) === 'visitante')
                 .filter(a => filtroNormalizado === 'todas' || normalizarTexto(a.unidade) === filtroNormalizado)
                 .filter(a => usuarioPodeVerUnidade(a.unidade));
-            if (!armariosVisitantes.length) {
-                tbodyVisitantes.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum armário encontrado.</td></tr>';
-                return;
-            }
             armariosVisitantes.forEach(armario => {
                 const tr = document.createElement('tr');
+                tr.dataset.status = armario.status || 'livre';
+                tr.dataset.busca = normalizarTexto([armario.numero, armario.unidade, armario.nomeVisitante, armario.nomePaciente, armario.leito, armario.whatsapp].filter(Boolean).join(' '));
                 if (armario.visitaEstendida) {
                     tr.classList.add('visita-estendida');
                 }
@@ -5434,12 +5134,14 @@
                 `;
                 tbodyVisitantes.appendChild(tr);
             });
+            aplicarFiltroLista('visitantes');
         }
         async function carregarTabelaAcompanhantes(unidadeFiltro, opcoes = {}) {
             const { recarregarArmarios = true } = opcoes;
             const tbodyAcompanhantes = document.querySelector('#tabela-acompanhantes tbody');
             if (!tbodyAcompanhantes) return;
             if (recarregarArmarios || !estado.armariosCarregados) {
+                definirCarregandoLista('acompanhantes', true);
                 await carregarArmarios({ forcarAtualizacao: recarregarArmarios, incluirTermos: true });
             }
             tbodyAcompanhantes.innerHTML = '';
@@ -5448,13 +5150,11 @@
                 .filter(armario => normalizarTexto(armario.tipo) === 'acompanhante')
                 .filter(a => filtroNormalizado === 'todas' || normalizarTexto(a.unidade) === filtroNormalizado)
                 .filter(a => usuarioPodeVerUnidade(a.unidade));
-            if (!armariosAcompanhantes.length) {
-                tbodyAcompanhantes.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum armário encontrado.</td></tr>';
-                return;
-            }
             armariosAcompanhantes.forEach(armario => {
                 const tr = document.createElement('tr');
                 const statusArmarioNormalizado = normalizarTexto(armario.status);
+                tr.dataset.status = armario.status || 'livre';
+                tr.dataset.busca = normalizarTexto([armario.numero, armario.unidade, armario.nomeAcompanhante, armario.nomeVisitante, armario.nomePaciente, armario.leito, armario.whatsapp].filter(Boolean).join(' '));
                 const statusTermoNormalizado = normalizarTexto(armario.termoStatus);
                 const botoesTermo = statusArmarioNormalizado !== 'livre'
                     ? (statusTermoNormalizado === 'pendente'
@@ -5482,6 +5182,7 @@
                 `;
                 tbodyAcompanhantes.appendChild(tr);
             });
+            aplicarFiltroLista('acompanhantes');
         }
         function obterArmariosAcompanhantesLivres(filtroTexto = '') {
             const filtroNormalizado = normalizarTexto(filtroTexto);
@@ -5884,8 +5585,15 @@
         async function carregarCadastroArmarios(unidadeFiltro) {
             const tbody = document.querySelector('#tabela-cadastro-armarios tbody');
             if (!tbody) return;
+            definirCarregandoLista('cadastro-armarios', true);
             const resultado = await callGoogleScript('getCadastroArmarios');
-            if (!resultado.success) return;
+            if (!resultado.success) {
+                const carregandoEl = document.getElementById('cadastro-armarios-carregando');
+                if (carregandoEl) carregandoEl.classList.remove('is-visible');
+                const tabelaEl = document.getElementById('tabela-cadastro-armarios');
+                if (tabelaEl) tabelaEl.style.display = '';
+                return;
+            }
             tbody.innerHTML = '';
             const filtroNormalizado = normalizarTexto(unidadeFiltro);
             estado.cadastroArmarios = resultado.data.map(armario => ({
@@ -5895,12 +5603,11 @@
             const armariosFiltrados = estado.cadastroArmarios
                 .filter(armario => filtroNormalizado === 'todas' || normalizarTexto(armario.unidade) === filtroNormalizado)
                 .filter(armario => usuarioPodeVerUnidade(armario.unidade));
-            if (!armariosFiltrados.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum armário cadastrado para esta unidade.</td></tr>';
-                return;
-            }
             armariosFiltrados.forEach(armario => {
                 const tr = document.createElement('tr');
+                tr.dataset.status = normalizarTexto(armario.status);
+                tr.dataset.tipo = normalizarTexto(armario.tipo);
+                tr.dataset.busca = normalizarTexto([armario.numero, armario.unidade, armario.localizacao].filter(Boolean).join(' '));
                 tr.innerHTML = `
                     <td>${armario.id}</td>
                     <td>${armario.numero}</td>
@@ -5915,17 +5622,20 @@
                 `;
                 tbody.appendChild(tr);
             });
+            aplicarFiltroLista('cadastro-armarios');
         }
         async function carregarTabelaUsuarios() {
             const tbody = elementos.tabelaUsuariosBody;
             if (!tbody) return;
             tbody.innerHTML = '';
             if (!perfilAtualEhAdmin()) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:12px; color:#c0392b;">Apenas administradores podem visualizar os usuários.</td></tr>';
-                return;
-            }
-            if (!estado.usuarios.length) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:12px; color:#5b6b86;">Nenhum usuário cadastrado.</td></tr>';
+                const vazioEl = document.getElementById('usuarios-vazio');
+                const carregandoEl = document.getElementById('usuarios-carregando');
+                const tabelaEl = document.getElementById('tabela-usuarios');
+                if (carregandoEl) carregandoEl.classList.remove('is-visible');
+                if (tabelaEl) tabelaEl.style.display = '';
+                if (vazioEl) vazioEl.classList.remove('is-visible');
+                tbody.innerHTML = '<tr data-placeholder="true"><td colspan="9" class="table-empty">Apenas administradores podem visualizar os usuários.</td></tr>';
                 return;
             }
             estado.usuarios.forEach(usuario => {
@@ -5933,6 +5643,9 @@
                 const perfilDescricao = usuario.perfil === 'admin' ? 'Administrador' : 'Usuário';
                 const unidadesDescricao = obterDescricaoUnidades(usuario.unidades);
                 const statusDescricao = normalizarTexto(usuario.status) === 'ativo' ? 'Ativo' : 'Inativo';
+                tr.dataset.perfil = normalizarTexto(usuario.perfil) === 'admin' ? 'admin' : 'usuario';
+                tr.dataset.status = normalizarTexto(usuario.status) === 'ativo' ? 'ativo' : 'inativo';
+                tr.dataset.busca = normalizarTexto([usuario.nome, usuario.email, usuario.matricula, unidadesDescricao].filter(Boolean).join(' '));
                 tr.innerHTML = `
                     <td>${usuario.id}</td>
                     <td>${usuario.nome}</td>
@@ -5949,6 +5662,7 @@
                 `;
                 tbody.appendChild(tr);
             });
+            aplicarFiltroLista('usuarios');
         }
         function renderizarOpcoesUnidadesFormulario(selecionadas = []) {
             if (!elementos.usuarioUnidades) return;
@@ -6030,8 +5744,18 @@
             }
             document.getElementById('usuario-nome').value = usuario.nome || '';
             document.getElementById('usuario-email').value = usuario.email || '';
+            document.getElementById('usuario-email-recuperacao').value = usuario.emailRecuperacao || '';
             if (elementos.usuarioSenha) {
                 elementos.usuarioSenha.value = '';
+                elementos.usuarioSenha.required = false;
+            }
+            const usuarioSenhaConfirmarEditar = document.getElementById('usuario-senha-confirmar');
+            if (usuarioSenhaConfirmarEditar) {
+                usuarioSenhaConfirmarEditar.value = '';
+            }
+            const usuarioSenhaHintEditar = document.getElementById('usuario-senha-hint');
+            if (usuarioSenhaHintEditar) {
+                usuarioSenhaHintEditar.textContent = 'Deixe em branco para manter a senha atual.';
             }
             if (elementos.usuarioStatus) {
                 elementos.usuarioStatus.value = usuario.status || 'ativo';
@@ -6330,6 +6054,7 @@
 
                 Swal.close();
                 mostrarSucesso(`Backup concluído. Registros movidos: ${total}.`);
+                carregarListaBackups({ forcar: true });
             } catch (erro) {
                 console.error('Erro ao executar backup:', erro);
                 if (elementos.backupResultado) {
@@ -6344,6 +6069,324 @@
                     elementos.backupExecutarBtn.innerHTML = textoOriginalBotao;
                 }
             }
+        }
+        function escaparHtml(texto) {
+            return String(texto ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        // Só aceita URLs http(s) para atributos src/href montados a partir de
+        // dados da planilha — qualquer outro esquema (javascript:, data: etc.)
+        // vira string vazia.
+        function urlHttpSegura(url) {
+            const texto = String(url ?? '').trim();
+            return /^https?:\/\//i.test(texto) ? texto : '';
+        }
+        function obterEstadoBackups() {
+            if (!estado.backups) {
+                estado.backups = {
+                    itens: [],
+                    carregando: false,
+                    carregado: false,
+                    detalhes: {},
+                    expandidos: {},
+                    ultimaAtualizacao: null
+                };
+            }
+            return estado.backups;
+        }
+        function formatarTamanhoArquivo(bytes) {
+            const numero = Number(bytes) || 0;
+            if (numero <= 0) return '—';
+            const unidades = ['B', 'KB', 'MB', 'GB'];
+            let valor = numero;
+            let indice = 0;
+            while (valor >= 1024 && indice < unidades.length - 1) {
+                valor /= 1024;
+                indice++;
+            }
+            const casas = valor < 10 && indice > 0 ? 1 : 0;
+            return `${valor.toFixed(casas)} ${unidades[indice]}`;
+        }
+        function formatarMesAnoBackup(mesAno) {
+            const texto = (mesAno || '').toString();
+            const match = texto.match(/^(\d{4})-(\d{2})$/);
+            if (!match) return texto || 'Sem data';
+            const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+                'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+            const indiceMes = Number(match[2]) - 1;
+            const nomeMes = meses[indiceMes] || match[2];
+            const titulo = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+            return `${titulo} de ${match[1]}`;
+        }
+        function formatarDataHoraBackup(iso) {
+            if (!iso) return 'Data desconhecida';
+            const data = new Date(iso);
+            if (Number.isNaN(data.getTime())) return 'Data desconhecida';
+            return data.toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+        function classeBadgeTipoBackup(tipo) {
+            const normal = normalizarTexto(tipo);
+            if (normal === 'logs') return 'badge--warning';
+            if (normal === 'termos') return 'badge--info';
+            return 'badge--success';
+        }
+        async function carregarListaBackups(opcoes = {}) {
+            const { forcar = false } = opcoes;
+            const estadoBackups = obterEstadoBackups();
+            if (!perfilAtualEhAdmin()) {
+                renderizarEstadoListaBackups('Disponível apenas para administradores.', 'empty');
+                if (elementos.backupListaResumo) {
+                    elementos.backupListaResumo.textContent = 'Acesso restrito a administradores.';
+                }
+                return;
+            }
+            if (estadoBackups.carregando) return;
+            if (estadoBackups.carregado && !forcar) {
+                renderizarListaBackups();
+                return;
+            }
+
+            estadoBackups.carregando = true;
+            renderizarEstadoListaBackups('Carregando backups...', 'loading');
+            if (elementos.backupListaResumo) {
+                elementos.backupListaResumo.textContent = 'Carregando backups...';
+            }
+            if (elementos.backupListaRefreshBtn) {
+                elementos.backupListaRefreshBtn.disabled = true;
+            }
+
+            try {
+                const resposta = await callGoogleScript('listarBackupsSistema', {}, { cache: false });
+                if (!resposta || !resposta.success) {
+                    throw new Error(resposta && resposta.error ? resposta.error : 'Não foi possível carregar os backups.');
+                }
+                estadoBackups.itens = Array.isArray(resposta.backups) ? resposta.backups : [];
+                estadoBackups.carregado = true;
+                estadoBackups.ultimaAtualizacao = new Date();
+                estadoBackups.expandidos = {};
+                renderizarListaBackups();
+            } catch (erro) {
+                console.error('Erro ao listar backups:', erro);
+                renderizarEstadoListaBackups('Não foi possível carregar os backups.', 'error');
+                if (elementos.backupListaResumo) {
+                    elementos.backupListaResumo.textContent = 'Falha ao carregar a lista de backups.';
+                }
+            } finally {
+                estadoBackups.carregando = false;
+                if (elementos.backupListaRefreshBtn) {
+                    elementos.backupListaRefreshBtn.disabled = false;
+                }
+            }
+        }
+        function renderizarEstadoListaBackups(mensagem, tipo = 'empty') {
+            const container = elementos.backupLista;
+            if (!container) return;
+            const classe = tipo === 'loading' ? 'table-loading'
+                : tipo === 'error' ? 'table-error' : 'table-empty';
+            container.innerHTML = `<p class="backup-lista-estado ${classe}">${escaparHtml(mensagem)}</p>`;
+        }
+        function renderizarListaBackups() {
+            const container = elementos.backupLista;
+            if (!container) return;
+            const estadoBackups = obterEstadoBackups();
+            const itens = Array.isArray(estadoBackups.itens) ? estadoBackups.itens : [];
+
+            if (!itens.length) {
+                renderizarEstadoListaBackups('Nenhum backup encontrado no Drive ainda.', 'empty');
+                if (elementos.backupListaResumo) {
+                    elementos.backupListaResumo.textContent = 'Nenhum backup guardado.';
+                }
+                return;
+            }
+
+            // Agrupar por mês/ano preservando a ordem (já vem do mais recente para o mais antigo)
+            const grupos = [];
+            const indicePorMes = {};
+            itens.forEach(backup => {
+                const chave = backup.mesAno || 'sem-data';
+                if (indicePorMes[chave] === undefined) {
+                    indicePorMes[chave] = grupos.length;
+                    grupos.push({ chave, mesAno: backup.mesAno, itens: [] });
+                }
+                grupos[indicePorMes[chave]].itens.push(backup);
+            });
+
+            const html = grupos.map(grupo => {
+                const cards = grupo.itens.map(backup => criarCardBackupHtml(backup)).join('');
+                return `
+                    <div class="backup-grupo">
+                        <div class="backup-grupo-titulo">
+                            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                            <span>${escaparHtml(formatarMesAnoBackup(grupo.mesAno))}</span>
+                            <span class="backup-grupo-contagem">${grupo.itens.length} ${grupo.itens.length === 1 ? 'arquivo' : 'arquivos'}</span>
+                        </div>
+                        <div class="backup-grupo-cards">${cards}</div>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = html;
+            reaplicarDetalhesBackupExpandidos();
+
+            if (elementos.backupListaResumo) {
+                const totalMeses = grupos.length;
+                const hora = estadoBackups.ultimaAtualizacao
+                    ? estadoBackups.ultimaAtualizacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : '';
+                const resumoMeses = totalMeses === 1 ? '1 mês' : `${totalMeses} meses`;
+                elementos.backupListaResumo.textContent =
+                    `${itens.length} ${itens.length === 1 ? 'arquivo' : 'arquivos'} • ${resumoMeses}${hora ? ` • atualizado às ${hora}` : ''}`;
+            }
+        }
+        function criarCardBackupHtml(backup) {
+            const id = escaparHtml(backup.id || '');
+            const badgeClasse = classeBadgeTipoBackup(backup.tipo);
+            const tipoRotulo = escaparHtml(backup.tipoRotulo || 'Backup');
+            const nome = escaparHtml(backup.nome || 'Backup');
+            const dataTexto = escaparHtml(formatarDataHoraBackup(backup.atualizadoEm));
+            const tamanhoTexto = escaparHtml(formatarTamanhoArquivo(backup.tamanhoBytes));
+            const urlSegura = typeof backup.url === 'string' && /^https:\/\//i.test(backup.url) ? backup.url : '';
+            const linkDrive = urlSegura
+                ? `<a class="backup-card-link" href="${escaparHtml(urlSegura)}" target="_blank" rel="noopener">
+                        <i class="fas fa-up-right-from-square" aria-hidden="true"></i> Abrir no Drive
+                   </a>`
+                : '';
+            return `
+                <div class="backup-card" data-backup-id="${id}">
+                    <div class="backup-card-main">
+                        <div class="backup-card-info">
+                            <div class="backup-card-topo">
+                                <span class="badge ${badgeClasse}">${tipoRotulo}</span>
+                                <span class="backup-card-nome" title="${nome}">${nome}</span>
+                            </div>
+                            <div class="backup-card-meta">
+                                <span><i class="fas fa-clock" aria-hidden="true"></i> ${dataTexto}</span>
+                                <span><i class="fas fa-database" aria-hidden="true"></i> ${tamanhoTexto}</span>
+                            </div>
+                        </div>
+                        <div class="backup-card-acoes">
+                            ${linkDrive}
+                            <button type="button" class="btn btn-secondary btn-sm backup-card-detalhes-btn" data-backup-id="${id}">
+                                <i class="fas fa-layer-group" aria-hidden="true"></i> Ver planilhas
+                            </button>
+                        </div>
+                    </div>
+                    <div class="backup-card-detalhes" data-detalhe-id="${id}" hidden></div>
+                </div>`;
+        }
+        function reaplicarDetalhesBackupExpandidos() {
+            const estadoBackups = obterEstadoBackups();
+            Object.keys(estadoBackups.expandidos || {}).forEach(id => {
+                if (estadoBackups.expandidos[id]) {
+                    const detalheCache = estadoBackups.detalhes[id];
+                    if (detalheCache) {
+                        aplicarDetalheBackupNaTela(id, detalheCache);
+                        marcarBotaoDetalhesBackup(id, true);
+                    }
+                }
+            });
+        }
+        function obterElementoDetalheBackup(id) {
+            if (!elementos.backupLista) return null;
+            return elementos.backupLista.querySelector(`.backup-card-detalhes[data-detalhe-id="${cssEscape(id)}"]`);
+        }
+        function marcarBotaoDetalhesBackup(id, expandido) {
+            if (!elementos.backupLista) return;
+            const botao = elementos.backupLista.querySelector(`.backup-card-detalhes-btn[data-backup-id="${cssEscape(id)}"]`);
+            if (!botao) return;
+            botao.innerHTML = expandido
+                ? '<i class="fas fa-chevron-up" aria-hidden="true"></i> Ocultar planilhas'
+                : '<i class="fas fa-layer-group" aria-hidden="true"></i> Ver planilhas';
+        }
+        function aplicarDetalheBackupNaTela(id, detalhe) {
+            const alvo = obterElementoDetalheBackup(id);
+            if (!alvo) return;
+            const abas = Array.isArray(detalhe.abas) ? detalhe.abas.filter(a => a.registros > 0) : [];
+            if (!abas.length) {
+                alvo.innerHTML = '<p class="backup-detalhe-vazio">Este backup não possui registros.</p>';
+                alvo.hidden = false;
+                return;
+            }
+            const linhas = abas.map(aba => `
+                <div class="backup-detalhe-linha">
+                    <span class="backup-detalhe-aba"><i class="fas fa-table" aria-hidden="true"></i> ${escaparHtml(aba.nome)}</span>
+                    <span class="backup-detalhe-qtd">${aba.registros.toLocaleString('pt-BR')} ${aba.registros === 1 ? 'registro' : 'registros'}</span>
+                </div>`).join('');
+            const total = Number(detalhe.totalRegistros) || 0;
+            alvo.innerHTML = `
+                <div class="backup-detalhe-cabecalho">
+                    <span>${abas.length} ${abas.length === 1 ? 'planilha' : 'planilhas'}</span>
+                    <span>${total.toLocaleString('pt-BR')} registros no total</span>
+                </div>
+                ${linhas}`;
+            alvo.hidden = false;
+        }
+        async function alternarDetalhesBackup(id) {
+            const estadoBackups = obterEstadoBackups();
+            const alvo = obterElementoDetalheBackup(id);
+            if (!alvo) return;
+
+            const estaExpandido = Boolean(estadoBackups.expandidos[id]);
+            if (estaExpandido) {
+                alvo.hidden = true;
+                estadoBackups.expandidos[id] = false;
+                marcarBotaoDetalhesBackup(id, false);
+                return;
+            }
+
+            // Já temos o detalhe em cache
+            if (estadoBackups.detalhes[id]) {
+                aplicarDetalheBackupNaTela(id, estadoBackups.detalhes[id]);
+                estadoBackups.expandidos[id] = true;
+                marcarBotaoDetalhesBackup(id, true);
+                return;
+            }
+
+            const botao = elementos.backupLista
+                ? elementos.backupLista.querySelector(`.backup-card-detalhes-btn[data-backup-id="${cssEscape(id)}"]`)
+                : null;
+            if (botao) {
+                botao.disabled = true;
+                botao.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Carregando...';
+            }
+            alvo.innerHTML = '<p class="backup-detalhe-carregando">Lendo planilhas do backup...</p>';
+            alvo.hidden = false;
+
+            try {
+                const resposta = await callGoogleScript('detalharBackup', { id }, { cache: false });
+                if (!resposta || !resposta.success) {
+                    throw new Error(resposta && resposta.error ? resposta.error : 'Não foi possível ler o backup.');
+                }
+                estadoBackups.detalhes[id] = {
+                    abas: Array.isArray(resposta.abas) ? resposta.abas : [],
+                    totalRegistros: Number(resposta.totalRegistros) || 0
+                };
+                estadoBackups.expandidos[id] = true;
+                aplicarDetalheBackupNaTela(id, estadoBackups.detalhes[id]);
+                marcarBotaoDetalhesBackup(id, true);
+            } catch (erro) {
+                console.error('Erro ao detalhar backup:', erro);
+                alvo.innerHTML = '<p class="backup-detalhe-erro">Não foi possível ler as planilhas deste backup.</p>';
+                estadoBackups.expandidos[id] = false;
+                marcarBotaoDetalhesBackup(id, false);
+            } finally {
+                if (botao) {
+                    botao.disabled = false;
+                }
+            }
+        }
+        function cssEscape(valor) {
+            const texto = (valor === undefined || valor === null) ? '' : valor.toString();
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+                return window.CSS.escape(texto);
+            }
+            return texto.replace(/["\\\]]/g, '\\$&');
         }
         function aplicarFiltrosHistoricoVisitantes() {
             const tbody = elementos.tabelaHistoricoVisitantesBody;
@@ -6490,6 +6533,7 @@
             atualizarSelectorPersonalizado(elementos.unitSelect);
             salvarPreferenciasCabecalho();
             atualizarFiltroUnidadeTermos();
+            atualizarPillContexto();
         }
         function renderizarTabelaUnidades() {
             if (!elementos.tabelaUnidadesBody) return;
@@ -6500,6 +6544,8 @@
                     .filter(armario => normalizarTexto(armario.unidade) === normalizarTexto(nomeLimpo)).length;
                 const statusClasse = unidade.status === 'ativa' ? 'status-livre' : 'status-vencido';
                 const tr = document.createElement('tr');
+                tr.dataset.status = normalizarTexto(unidade.status) === 'ativa' ? 'ativa' : 'inativa';
+                tr.dataset.busca = normalizarTexto(nomeLimpo);
                 tr.innerHTML = `
                     <td>${unidade.id}</td>
                     <td>${nomeLimpo}</td>
@@ -6512,6 +6558,7 @@
                 `;
                 elementos.tabelaUnidadesBody.appendChild(tr);
             });
+            aplicarFiltroLista('cadastro-unidades');
         }
         function tratarAcaoUnidade(evento) {
             const botao = evento.target.closest('button[data-acao-unidade]');
@@ -6653,6 +6700,109 @@
                 }
             }
         }
+        // Consulta rápida a partir do card do Monitor: para armários livres mostra
+        // um resumo simples; para ocupados abre o modal completo de detalhes.
+        function abrirConsultaArmario(armario) {
+            if (!armario) return;
+            if (normalizarTexto(armario.status) === 'livre' && !armarioEhContingencia(armario)) {
+                const tipoLabel = normalizarTexto(armario.tipo) === 'acompanhante' ? 'Acompanhante' : 'Visitante';
+                Swal.fire({
+                    html: `
+                        <div class="armario-modal-card consulta-livre">
+                            <header class="armario-modal-header">
+                                <div class="armario-modal-hero">
+                                    <div class="armario-modal-icon livre">
+                                        <i class="fas fa-key" aria-hidden="true"></i>
+                                    </div>
+                                    <div>
+                                        <div class="armario-modal-eyebrow">${tipoLabel}</div>
+                                        <h2 class="armario-modal-title">Armário ${escaparHtml(armario.numero || '-')}</h2>
+                                        <p class="armario-modal-subtitle">${escaparHtml(armario.unidade || '-')}</p>
+                                    </div>
+                                </div>
+                                <span class="armario-modal-status status-livre">
+                                    <span class="armario-modal-status-dot" aria-hidden="true"></span>
+                                    Livre
+                                </span>
+                            </header>
+                            <div class="armario-modal-section">
+                                <p class="armario-modal-consulta-texto">
+                                    Este armário está disponível. Use <strong>Abrir agora</strong> para iniciar um novo cadastro.
+                                </p>
+                            </div>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    showCloseButton: true,
+                    confirmButtonText: 'Abrir agora',
+                    cancelButtonText: 'Fechar',
+                    reverseButtons: true,
+                    buttonsStyling: false,
+                    customClass: {
+                        popup: 'armario-modal-popup',
+                        confirmButton: 'armario-modal-primary',
+                        cancelButton: 'armario-modal-tertiary'
+                    }
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        abrirModalArmario(armario);
+                    }
+                });
+                return;
+            }
+            abrirModalArmario(armario);
+        }
+
+        // "Em uso há 2h 15min" — calculado a partir de dataRegistro + horaInicio.
+        // Aceita data em dd/mm/aaaa ou aaaa-mm-dd; sem data válida, assume hoje.
+        function calcularTempoDecorridoUso(armario) {
+            const hora = (armario?.horaInicio || '').toString().trim();
+            const casadaHora = hora.match(/^(\d{1,2}):(\d{2})/);
+            if (!casadaHora) return '';
+            const dataBruta = (armario?.dataRegistro || '').toString().trim();
+            let ano; let mes; let dia;
+            let casadaData = dataBruta.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+            if (casadaData) {
+                dia = Number(casadaData[1]); mes = Number(casadaData[2]); ano = Number(casadaData[3]);
+            } else {
+                casadaData = dataBruta.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (casadaData) {
+                    ano = Number(casadaData[1]); mes = Number(casadaData[2]); dia = Number(casadaData[3]);
+                } else {
+                    const hoje = new Date();
+                    ano = hoje.getFullYear(); mes = hoje.getMonth() + 1; dia = hoje.getDate();
+                }
+            }
+            const inicio = new Date(ano, mes - 1, dia, Number(casadaHora[1]), Number(casadaHora[2]));
+            if (Number.isNaN(inicio.getTime())) return '';
+            const minutos = Math.floor((Date.now() - inicio.getTime()) / 60000);
+            if (!Number.isFinite(minutos) || minutos < 0) return '';
+            if (minutos < 1) return 'agora mesmo';
+            if (minutos < 60) return `há ${minutos}min`;
+            const horas = Math.floor(minutos / 60);
+            const resto = minutos % 60;
+            if (horas < 24) {
+                return resto ? `há ${horas}h ${String(resto).padStart(2, '0')}min` : `há ${horas}h`;
+            }
+            const dias = Math.floor(horas / 24);
+            const horasResto = horas % 24;
+            return horasResto ? `há ${dias}d ${horasResto}h` : `há ${dias}d`;
+        }
+        // Ação primária do card: livre abre o fluxo de cadastro/termo;
+        // ocupado (inclusive contingência) vai direto para a liberação.
+        function executarAcaoPrimariaArmario(armario) {
+            if (!armario) return;
+            if (normalizarTexto(armario.status) === 'livre' && !armarioEhContingencia(armario)) {
+                abrirModalArmario(armario);
+                return;
+            }
+            if (normalizarTexto(armario.tipo) === 'visitante') {
+                confirmarLiberacaoVisitante(armario.id);
+            } else {
+                confirmarLiberacaoAcompanhante(armario.id);
+            }
+        }
+
         function abrirModalArmario(armario) {
             garantirPortaisCabecalho();
             if (armario.status === 'livre') {
@@ -6722,6 +6872,13 @@
                 travaRolagem.aplicar();
             }
             elementos.armarioModal.style.display = 'flex';
+            // Operador começa sempre pela busca de prontuário — foco direto
+            // nela poupa um toque a cada cadastro.
+            setTimeout(() => {
+                if (elementos.armarioModal.style.display === 'flex') {
+                    elementos.prontuarioBuscaInput?.focus();
+                }
+            }, 80);
         } else {
             const dadosTermoAtual = armario.termoInfo || {
                 paciente: armario.nomePaciente,
@@ -6739,6 +6896,27 @@
             const termoStatusTexto = formatarStatusTermo(armario.termoStatus);
             const termoPendente = termoStatusNormalizado === 'pendente';
             const termoEmAndamento = termoStatusNormalizado === 'em andamento';
+            // Todos os dados vindos da planilha passam por escape antes de
+            // entrar no HTML do modal (proteção contra HTML/script injetado
+            // em nomes, unidades, contatos etc.).
+            const seguro = {
+                numero: escaparHtml(armario.numero || '-'),
+                unidade: escaparHtml(armario.unidade || '-'),
+                nomePaciente: escaparHtml(armario.nomePaciente || '-'),
+                nomeVisitante: escaparHtml(armario.nomeVisitante || '-'),
+                prontuario: escaparHtml(armario.prontuario || ''),
+                leito: escaparHtml(armario.leito || ''),
+                whatsapp: escaparHtml(armario.whatsapp || ''),
+                horaInicio: escaparHtml(armario.horaInicio || '-'),
+                horaPrevista: escaparHtml(armario.horaPrevista || '')
+            };
+            const tempoDecorrido = calcularTempoDecorridoUso(armario);
+            // Agilidade: o termo é consultado na liberação/reimpressão — já
+            // aquece o cache de leitura enquanto o operador olha o modal.
+            if (armario.tipo === 'acompanhante') {
+                callGoogleScript('getTermo', montarPayloadTermo(armario, { incluirFinalizados: true }))
+                    .catch(() => {});
+            }
             const grupoContingencia = `contingencia-${normalizarIdentificador(armario.idPlanilha || armario.id || armario.numero)}`;
             if (armario.fotoContingenciaUrl) {
                 registrarGaleriaImagem(grupoContingencia, [{
@@ -6750,12 +6928,13 @@
                     responsavel: armario.nomeVisitante || ''
                 }]);
             }
-            const fotoContingenciaHtml = armario.fotoContingenciaUrl
+            const fotoContingenciaUrlSegura = urlHttpSegura(armario.fotoContingenciaUrl);
+            const fotoContingenciaHtml = fotoContingenciaUrlSegura
                 ? `<div class="armario-foto">
                         <strong>Foto da contingência:</strong>
                         <div class="armario-foto-thumb">
-                            <button type="button" class="foto-contingencia-btn" data-imagem-modal="true" data-image-group="${grupoContingencia}" data-image-index="0">
-                                <img src="${armario.fotoContingenciaUrl}" alt="Foto registrada da contingência" loading="lazy">
+                            <button type="button" class="foto-contingencia-btn" data-imagem-modal="true" data-image-group="${escaparHtml(grupoContingencia)}" data-image-index="0">
+                                <img src="${escaparHtml(fotoContingenciaUrlSegura)}" alt="Foto registrada da contingência" loading="lazy">
                             </button>
                         </div>
                     </div>`
@@ -6781,58 +6960,77 @@
                         <div class="armario-modal-termo-text">${termoAviso}</div>
                     </div>`
                     : '';
-                const dataRegistroFormatada = formatarDataComDiaSemana(armario.dataRegistro);
+                const dataRegistroFormatada = escaparHtml(formatarDataComDiaSemana(armario.dataRegistro));
                 const dataRegistroHtml = `<p><span class="armario-modal-label">Data</span><span class="armario-modal-value">${dataRegistroFormatada}</span></p>`;
                 const statusNormalizado = normalizarTexto(armario.status).replace(/\s+/g, '-');
-                const botoesApoio = `
-                    <div class="armario-modal-actions">
-                        ${armario.tipo === 'acompanhante' ? '<button id="btn-imagens-armario" class="armario-modal-action-btn" type="button">Registros em imagens</button>' : ''}
-                        ${armario.tipo === 'visitante' ? '<button id="btn-editar-horario" class="armario-modal-action-btn" type="button">Editar horário/visita</button>' : ''}
-                    </div>`;
-                const moverContingenciaHtml = ehContingencia
-                    ? `<div class="armario-modal-actions"><button id="btn-mover-contingencia" class="armario-modal-action-btn" type="button">Mover para armário livre</button></div>`
-                    : '';
-                const reimpressaoHtml = armario.tipo === 'acompanhante'
-                    ? `<div class="armario-modal-actions"><button id="btn-reimprimir-ticket" class="armario-modal-action-btn" type="button">Reimprimir comprovante</button></div>`
+                // filete do cabeçalho segue a mesma cor do card no Monitor
+                const statusVisualModal = ehContingencia ? 'contingencia' : statusNormalizado;
+                // Ações de apoio agrupadas numa grade única: mesma ordem
+                // sempre, ícone + rótulo, alvo de toque grande.
+                const acoesRapidas = [];
+                if (armario.tipo === 'acompanhante' && termoPendente) {
+                    acoesRapidas.push({ id: 'btn-aplicar-termo', icone: 'fa-file-signature', rotulo: 'Aplicar termo agora', destaque: true });
+                }
+                if (ehContingencia) {
+                    acoesRapidas.push({ id: 'btn-mover-contingencia', icone: 'fa-exchange-alt', rotulo: 'Mover p/ armário livre' });
+                }
+                if (armario.tipo === 'visitante') {
+                    acoesRapidas.push({ id: 'btn-editar-horario', icone: 'fa-clock', rotulo: 'Editar horário/visita' });
+                }
+                if (armario.tipo === 'acompanhante') {
+                    acoesRapidas.push({ id: 'btn-imagens-armario', icone: 'fa-images', rotulo: 'Registros em imagens' });
+                    acoesRapidas.push({ id: 'btn-reimprimir-ticket', icone: 'fa-print', rotulo: 'Reimprimir comprovante' });
+                }
+                const acoesRapidasHtml = acoesRapidas.length
+                    ? `<div class="armario-modal-quick-grid">
+                        ${acoesRapidas.map(acao => `
+                            <button id="${acao.id}" class="armario-modal-quick-btn${acao.destaque ? ' destaque' : ''}" type="button">
+                                <i class="fas ${acao.icone}" aria-hidden="true"></i>
+                                <span>${acao.rotulo}</span>
+                            </button>`).join('')}
+                    </div>`
                     : '';
                 Swal.fire({
                     html: `
                         <div class="armario-modal-card">
-                            <header class="armario-modal-header">
+                            <header class="armario-modal-header status-${statusVisualModal}">
                                 <div class="armario-modal-hero">
                                     <div class="armario-modal-icon">
                                         <i class="fas fa-lock" aria-hidden="true"></i>
                                     </div>
                                     <div>
                                         <div class="armario-modal-eyebrow">${armario.tipo === 'acompanhante' ? 'Acompanhante' : 'Visitante'}</div>
-                                        <h2 class="armario-modal-title">Armário ${armario.numero}</h2>
-                                        <p class="armario-modal-subtitle">${armario.unidade || '-'}</p>
+                                        <h2 class="armario-modal-title">Armário ${seguro.numero}</h2>
+                                        <p class="armario-modal-subtitle">${seguro.unidade}</p>
                                     </div>
                                 </div>
-                                <span class="armario-modal-status status-${statusNormalizado}">
-                                    <span class="armario-modal-status-dot" aria-hidden="true"></span>
-                                    ${formatarStatusArmario(armario.status)}
-                                </span>
+                                <div class="armario-modal-status-wrap">
+                                    <span class="armario-modal-status status-${statusNormalizado}">
+                                        <span class="armario-modal-status-dot" aria-hidden="true"></span>
+                                        ${formatarStatusArmario(armario.status)}
+                                    </span>
+                                    ${tempoDecorrido ? `<span class="armario-modal-tempo"><i class="fas fa-hourglass-half" aria-hidden="true"></i> Em uso ${escaparHtml(tempoDecorrido)}</span>` : ''}
+                                </div>
                             </header>
                             <div class="armario-modal-grid">
                                 <div class="armario-modal-patient">
                                     <span class="armario-modal-label">Paciente</span>
-                                    <span class="armario-modal-patient-name">${armario.nomePaciente || '-'}</span>
+                                    <span class="armario-modal-patient-name">${seguro.nomePaciente}</span>
                                     <span class="armario-modal-patient-sub">
-                                        ${armario.prontuario ? `Prontuário ${armario.prontuario}` : 'Sem prontuário'}
-                                        ${armario.leito ? ` • Leito ${armario.leito}` : ''}
+                                        ${seguro.prontuario ? `Prontuário ${seguro.prontuario}` : 'Sem prontuário'}
+                                        ${seguro.leito ? ` • Leito ${seguro.leito}` : ''}
                                     </span>
                                     <span class="armario-modal-visitor">
-                                        ${armario.tipo === 'acompanhante' ? 'Acompanhante' : 'Visitante'}: ${armario.nomeVisitante || '-'}
+                                        ${armario.tipo === 'acompanhante' ? 'Acompanhante' : 'Visitante'}: ${seguro.nomeVisitante}
                                     </span>
                                 </div>
                                 <div class="armario-modal-chips">
-                                    <span class="armario-modal-chip">Volumes: ${formatarVolumeParaExibicao(armario.volumes)}</span>
-                                    ${armario.whatsapp ? `<span class="armario-modal-chip">WhatsApp: ${armario.whatsapp}</span>` : ''}
-                                    <span class="armario-modal-chip">Desde ${armario.horaInicio || '-'}</span>
+                                    <span class="armario-modal-chip">Volumes: ${escaparHtml(formatarVolumeParaExibicao(armario.volumes))}</span>
+                                    ${seguro.whatsapp ? `<span class="armario-modal-chip">WhatsApp: ${seguro.whatsapp}</span>` : ''}
+                                    <span class="armario-modal-chip">Desde ${seguro.horaInicio}</span>
                                     ${armario.visitaEstendida
                                         ? `<span class="armario-modal-chip">Visita estendida</span>`
-                                        : (armario.horaPrevista ? `<span class="armario-modal-chip">Prev. saída ${armario.horaPrevista}</span>` : '')}
+                                        : (seguro.horaPrevista ? `<span class="armario-modal-chip">Prev. saída ${seguro.horaPrevista}</span>` : '')}
                                 </div>
                             </div>
                             <div class="armario-modal-section">
@@ -6840,20 +7038,17 @@
                             </div>
                             ${ehContingencia ? `<div class="armario-modal-section">${fotoContingenciaHtml}</div>` : ''}
                             ${termoHtml ? `<div class="armario-modal-section">${termoHtml}</div>` : ''}
-                            ${botoesApoio}
-                            ${moverContingenciaHtml}
-                            ${reimpressaoHtml}
-                            ${armario.tipo === 'acompanhante' && termoPendente ? `<div class="armario-modal-actions"><button id="btn-aplicar-termo" class="armario-modal-primary-inline" type="button">Aplicar termo agora</button></div>` : ''}
+                            ${acoesRapidasHtml}
                         </div>
                     `,
-                    icon: 'info',
                     showCancelButton: true,
                     showDenyButton: armario.tipo === 'acompanhante',
-                    confirmButtonText: 'Liberar Armário',
-                    denyButtonText: 'Movimentações',
+                    showCloseButton: true,
+                    confirmButtonText: '<i class="fas fa-unlock" aria-hidden="true"></i> Liberar Armário',
+                    denyButtonText: '<i class="fas fa-dolly" aria-hidden="true"></i> Movimentações',
                     cancelButtonText: 'Fechar',
-                    confirmButtonColor: '#28a745',
                     reverseButtons: true,
+                    buttonsStyling: false,
                     customClass: {
                         popup: 'armario-modal-popup',
                         confirmButton: 'armario-modal-primary',
@@ -6957,7 +7152,7 @@
 
             const optionsHtml = livres.map(item => {
                 const unidadeTexto = item.unidade ? ` - ${item.unidade}` : '';
-                return `<option value="${item.id}">${item.numero}${unidadeTexto}</option>`;
+                return `<option value="${escaparHtml(item.id)}">${escaparHtml(`${item.numero}${unidadeTexto}`)}</option>`;
             }).join('');
 
             const resultado = await Swal.fire({
@@ -7087,12 +7282,12 @@
             const horaAtual = armario.horaPrevista || '';
 
             const resultado = await Swal.fire({
-                title: `Editar horário - Armário ${armario.numero}`,
+                title: `Editar horário - Armário ${escaparHtml(armario.numero || '')}`,
                 html: `
                     <div class="swal-form-grid">
                         <div class="swal-form-group">
                             <label for="editar-hora-prevista">Previsão de saída</label>
-                            <input type="time" id="editar-hora-prevista" class="swal2-input" value="${horaAtual}" ${visitaEstendidaAtual ? 'disabled' : ''}>
+                            <input type="time" id="editar-hora-prevista" class="swal2-input" value="${escaparHtml(horaAtual)}" ${visitaEstendidaAtual ? 'disabled' : ''}>
                         </div>
                         <div class="swal-form-group">
                             <label class="swal2-checkbox" style="margin-top:12px;">
@@ -7188,7 +7383,7 @@
             const htmlCamposVisitante = `
                 <div class="swal-form-group">
                     <label for="editar-hora-prevista">Previsão de saída</label>
-                    <input type="time" id="editar-hora-prevista" class="swal2-input" value="${horaPrevistaAtual}" ${visitaEstendidaAtual ? 'disabled' : ''}>
+                    <input type="time" id="editar-hora-prevista" class="swal2-input" value="${escaparHtml(horaPrevistaAtual)}" ${visitaEstendidaAtual ? 'disabled' : ''}>
                 </div>
                 <div class="swal-form-group">
                     <label class="swal2-checkbox" style="margin-top:12px;">
@@ -7199,29 +7394,29 @@
             const htmlObservacoes = tipoNormalizado === 'acompanhante'
                 ? `<div class="swal-form-group">
                         <label for="editar-observacoes">Observações</label>
-                        <textarea id="editar-observacoes" class="swal2-textarea" placeholder="Anotações adicionais">${armario.observacoes || ''}</textarea>
+                        <textarea id="editar-observacoes" class="swal2-textarea" placeholder="Anotações adicionais">${escaparHtml(armario.observacoes || '')}</textarea>
                    </div>`
                 : '';
 
             const resultado = await Swal.fire({
-                title: `Editar dados - Armário ${armario.numero}`,
+                title: `Editar dados - Armário ${escaparHtml(armario.numero || '')}`,
                 html: `
                     <div class="swal-form-grid">
                         <div class="swal-form-group">
                             <label for="editar-nome-visitante">${tipoNormalizado === 'acompanhante' ? 'Nome do acompanhante' : 'Nome do visitante'}</label>
-                            <input type="text" id="editar-nome-visitante" class="swal2-input" value="${armario.nomeVisitante || ''}" required>
+                            <input type="text" id="editar-nome-visitante" class="swal2-input" value="${escaparHtml(armario.nomeVisitante || '')}" required>
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-nome-paciente">Nome do paciente</label>
-                            <input type="text" id="editar-nome-paciente" class="swal2-input" value="${armario.nomePaciente || ''}" required>
+                            <input type="text" id="editar-nome-paciente" class="swal2-input" value="${escaparHtml(armario.nomePaciente || '')}" required>
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-prontuario">Prontuário</label>
-                            <input type="text" id="editar-prontuario" class="swal2-input" value="${armario.prontuario || ''}" placeholder="Opcional">
+                            <input type="text" id="editar-prontuario" class="swal2-input" value="${escaparHtml(armario.prontuario || '')}" placeholder="Opcional">
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-leito">Leito</label>
-                            <input type="text" id="editar-leito" class="swal2-input" value="${armario.leito || ''}" required>
+                            <input type="text" id="editar-leito" class="swal2-input" value="${escaparHtml(armario.leito || '')}" required>
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-volumes">Volumes</label>
@@ -7229,7 +7424,7 @@
                         </div>
                         <div class="swal-form-group">
                             <label for="editar-whatsapp">WhatsApp</label>
-                            <input type="tel" id="editar-whatsapp" class="swal2-input" value="${armario.whatsapp || ''}" placeholder="(00) 00000-0000">
+                            <input type="tel" id="editar-whatsapp" class="swal2-input" value="${escaparHtml(armario.whatsapp || '')}" placeholder="(00) 00000-0000">
                         </div>
                         ${tipoNormalizado === 'visitante' ? htmlCamposVisitante : ''}
                         ${htmlObservacoes}
@@ -7266,8 +7461,8 @@
                     const horaPrevista = tipoNormalizado === 'visitante' ? popup.querySelector('#editar-hora-prevista').value : '';
                     const observacoes = tipoNormalizado === 'acompanhante' ? (popup.querySelector('#editar-observacoes')?.value || '').trim() : '';
 
-                    if (!nomeVisitante || !nomePaciente || !leito) {
-                        Swal.showValidationMessage('Preencha nome do visitante/acompanhante, paciente e leito.');
+                    if (!nomeVisitante || !nomePaciente || !prontuario || !leito) {
+                        Swal.showValidationMessage('Preencha nome do visitante/acompanhante, paciente, prontuário e leito.');
                         return false;
                     }
                     if (!Number.isFinite(volumesValor) || volumesValor < 0) {
@@ -7497,6 +7692,13 @@
             if (elementos.usuarioModalTitle) {
                 elementos.usuarioModalTitle.textContent = 'Cadastrar Usuário';
             }
+            if (elementos.usuarioSenha) {
+                elementos.usuarioSenha.required = true;
+            }
+            const usuarioSenhaHintNovo = document.getElementById('usuario-senha-hint');
+            if (usuarioSenhaHintNovo) {
+                usuarioSenhaHintNovo.textContent = '';
+            }
             if (elementos.usuarioStatus) {
                 elementos.usuarioStatus.value = 'ativo';
             }
@@ -7565,6 +7767,7 @@
                         id: idPlanilha,
                         nomeVisitante: dados.nomeVisitante,
                         nomePaciente: dados.nomePaciente,
+                        prontuario: dados.prontuario,
                         leito: dados.leito,
                         volumes: volumesInformados,
                         whatsapp: dados.whatsapp
@@ -7573,6 +7776,7 @@
                         id: idPlanilha,
                         nomeVisitante: dados.nomeVisitante,
                         nomePaciente: dados.nomePaciente,
+                        prontuario: dados.prontuario,
                         leito: dados.leito,
                         whatsapp: dados.whatsapp
                     };
@@ -7624,11 +7828,14 @@
             const botaoSalvar = document.getElementById('usuario-btn-salvar');
             const finalizarLoading = iniciarLoadingBotao(botaoSalvar);
             const usuarioId = elementos.usuarioForm.dataset.id;
+            const senha = elementos.usuarioSenha ? elementos.usuarioSenha.value.trim() : '';
+            const senhaConfirmar = document.getElementById('usuario-senha-confirmar')?.value.trim() || '';
             const dados = {
                 id: usuarioId,
                 nome: document.getElementById('usuario-nome').value.trim(),
                 email: document.getElementById('usuario-email').value.trim(),
-                senha: elementos.usuarioSenha ? elementos.usuarioSenha.value.trim() : '',
+                senha,
+                emailRecuperacao: document.getElementById('usuario-email-recuperacao')?.value.trim() || '',
                 perfil: document.getElementById('usuario-perfil').value,
                 status: elementos.usuarioStatus ? elementos.usuarioStatus.value : 'ativo',
                 acessoVisitantes: document.getElementById('acesso-visitantes').checked,
@@ -7636,6 +7843,14 @@
                 unidades: obterUnidadesSelecionadasFormulario()
             };
             try {
+                if (!usuarioId && !senha) {
+                    mostrarErro('Informe uma senha para o novo usuário.');
+                    return;
+                }
+                if (senha && senha !== senhaConfirmar) {
+                    mostrarErro('A confirmação de senha não coincide.');
+                    return;
+                }
                 if (!dados.unidades.length && dados.perfil !== 'admin') {
                     mostrarErro('Selecione ao menos uma unidade para o usuário.');
                     return;
@@ -7967,6 +8182,18 @@
                 return numero > 0 ? numero : minimo;
             }
             return valorNormalizado || minimo;
+        }
+        // Gera resumo em linhas rótulo/valor para modais Swal.
+        // Pares com valor vazio/nulo são omitidos.
+        function gerarLinhasResumo(pares) {
+            const linhas = (pares || [])
+                .filter(par => Array.isArray(par) && par[1] !== null && par[1] !== undefined && String(par[1]).trim() !== '')
+                .map(([rotulo, valor]) => `
+                    <div class="resumo-row">
+                        <span class="resumo-label">${escaparHtml(rotulo)}</span>
+                        <span class="resumo-value">${escaparHtml(valor)}</span>
+                    </div>`).join('');
+            return `<div class="resumo-list">${linhas}</div>`;
         }
         function formatarVolumeParaExibicao(valor, minimo = 1) {
             const volumeNormalizado = aplicarMinimoVolumes(valor, minimo);
@@ -8847,6 +9074,7 @@
             if (!elementos.termoAssinaturaCanvas) return;
             evento.preventDefault();
             termoDesenhandoAssinatura = true;
+            elementos.termoAssinaturaCanvas.setPointerCapture?.(evento.pointerId);
             const ctx = elementos.termoAssinaturaCanvas.getContext('2d');
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
@@ -8871,6 +9099,7 @@
             evento.preventDefault();
             termoDesenhandoAssinatura = false;
             termoAssinaturaDesenhada = true;
+            elementos.termoAssinaturaCanvas?.releasePointerCapture?.(evento.pointerId);
             elementos.termoAssinaturaCanvas?.closest('.wizard-field')?.classList.remove('invalid');
             salvarRascunhoTermo();
         }
@@ -8905,6 +9134,7 @@
             if (!elementos.movSignatureCanvas) return;
             evento.preventDefault();
             movDesenhandoAssinatura = true;
+            elementos.movSignatureCanvas.setPointerCapture?.(evento.pointerId);
             const ctx = elementos.movSignatureCanvas.getContext('2d');
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
@@ -8929,6 +9159,7 @@
             evento.preventDefault();
             movDesenhandoAssinatura = false;
             movAssinaturaDesenhada = true;
+            elementos.movSignatureCanvas?.releasePointerCapture?.(evento.pointerId);
             movAssinaturaImagemAtual = elementos.movSignatureCanvas?.toDataURL('image/png') || movAssinaturaImagemAtual;
             elementos.movSignatureField?.classList.remove('invalid');
         }
@@ -9232,7 +9463,7 @@
         }
         async function coletarAssinaturaEncerramento(nomeAcompanhante) {
             const nomeTratado = (nomeAcompanhante || '').toString().trim();
-            const textoAssinante = nomeTratado ? `<strong>${nomeTratado}</strong>` : 'o acompanhante';
+            const textoAssinante = nomeTratado ? `<strong>${escaparHtml(nomeTratado)}</strong>` : 'o acompanhante';
             let controlador = null;
             let botaoLimpar = null;
             let limparHandler = null;
@@ -9801,8 +10032,7 @@
                         };
                     })
                     .filter(item => item.quantidade > 0 && item.descricao)
-                    .map(item => ({ quantidade: item.quantidade, descricao: item.descricao, fotoBase64: item.fotoBase64, fotoMime: item.fotoMime }))
-                    .filter(item => item.quantidade > 0 && item.descricao && item.fotoBase64);
+                    .map(item => ({ quantidade: item.quantidade, descricao: item.descricao, fotoBase64: item.fotoBase64, fotoMime: item.fotoMime }));
             }
 
             return linhas.map(linha => {
@@ -10240,7 +10470,10 @@
         }
         function registrarGaleriaImagem(grupo, itens = []) {
             if (!grupo) return;
-            galeriasImagem[grupo] = Array.isArray(itens) ? itens.filter(item => item && item.url) : [];
+            // aceita apenas URLs http(s) — nada de data:/javascript: vindos da planilha
+            galeriasImagem[grupo] = Array.isArray(itens)
+                ? itens.filter(item => item && urlHttpSegura(item.url))
+                : [];
         }
         function obterItemGaleriaImagem(grupo, indice) {
             const itens = galeriasImagem[grupo];
@@ -10382,22 +10615,24 @@
 
             const grupoGaleria = `armario-${normalizarIdentificador(armario.idPlanilha || armario.id || armario.numero)}-${Date.now()}`;
             registrarGaleriaImagem(grupoGaleria, imagens);
-            const resumo = `<div class="registro-imagens-resumo"><span>Armário <strong>${armario.numero || '-'}</strong></span><span>${imagens.length} registro(s)</span></div>`;
+            const resumo = `<div class="registro-imagens-resumo"><span>Armário <strong>${escaparHtml(armario.numero || '-')}</strong></span><span>${imagens.length} registro(s)</span></div>`;
             const conteudoImagens = imagens.length
-                ? `<div class="registro-imagens-grid">${imagens.map((item, indice) => `
+                ? `<div class="registro-imagens-grid">${imagens.map((item, indice) => {
+                        const urlSegura = urlHttpSegura(item.url);
+                        return `
                         <article class="registro-imagem-card">
                             <div class="registro-imagem-info">
-                                <p class="registro-imagem-contexto">${item.contexto || ''}</p>
-                                <h4 class="registro-imagem-titulo">${item.titulo}</h4>
-                                ${item.detalhe ? `<p class="registro-imagem-detalhe">${item.detalhe}</p>` : ''}
+                                <p class="registro-imagem-contexto">${escaparHtml(item.contexto || '')}</p>
+                                <h4 class="registro-imagem-titulo">${escaparHtml(item.titulo || '')}</h4>
+                                ${item.detalhe ? `<p class="registro-imagem-detalhe">${escaparHtml(item.detalhe)}</p>` : ''}
                                 <div class="registro-imagem-meta">
-                                    ${item.dataHora ? `<span><i class="fas fa-clock"></i> ${item.dataHora}</span>` : ''}
-                                    ${item.responsavel ? `<span><i class="fas fa-user"></i> ${item.responsavel}</span>` : ''}
+                                    ${item.dataHora ? `<span><i class="fas fa-clock"></i> ${escaparHtml(item.dataHora)}</span>` : ''}
+                                    ${item.responsavel ? `<span><i class="fas fa-user"></i> ${escaparHtml(item.responsavel)}</span>` : ''}
                                 </div>
-                                <a class="registro-imagem-link" href="${item.url}" target="_blank" rel="noopener noreferrer">Abrir imagem</a>
+                                ${urlSegura ? `<a class="registro-imagem-link" href="${escaparHtml(urlSegura)}" target="_blank" rel="noopener noreferrer">Abrir imagem</a>` : ''}
                             </div>
-                        </article>
-                    `).join('')}</div>`
+                        </article>`;
+                    }).join('')}</div>`
                 : '<div class="registro-imagens-vazia">Nenhum registro em imagem encontrado para este armário.</div>';
 
             Swal.update({
@@ -10453,19 +10688,19 @@
             const responsavelTexto = item.responsavel ? item.responsavel : 'Não informado';
             const assinaturaSrc = montarFonteAssinaturaCliente(item.assinatura, item.assinaturaMime || 'image/png');
             const assinaturaHtml = assinaturaSrc
-                ? `<span class="mov-assinatura-preview"><img src="${assinaturaSrc}" alt="Assinatura de ${responsavelTexto}"></span>`
-                : `<span class="mov-assinatura-texto">${responsavelTexto}</span>`;
+                ? `<span class="mov-assinatura-preview"><img src="${escaparHtml(assinaturaSrc)}" alt="Assinatura de ${escaparHtml(responsavelTexto)}"></span>`
+                : `<span class="mov-assinatura-texto">${escaparHtml(responsavelTexto)}</span>`;
             const itensDetalhe = normalizarListaItensMovimentacao(item.itens);
             const itensHtml = itensDetalhe.length
-                ? `<ul class="movimentacao-itens-detalhe">${itensDetalhe.map(it => `<li>${Number(it.quantidade)}x ${it.descricao}</li>`).join('')}</ul>`
+                ? `<ul class="movimentacao-itens-detalhe">${itensDetalhe.map(it => `<li>${Number(it.quantidade)}x ${escaparHtml(it.descricao)}</li>`).join('')}</ul>`
                 : '';
             bloco.innerHTML = `
                 <div class="movimentacao-header">
-                    <span>${formatarTituloMovimento(item.tipo)}</span>
-                    <span>${formatarData(item.data)} ${item.hora}</span>
+                    <span>${escaparHtml(formatarTituloMovimento(item.tipo))}</span>
+                    <span>${escaparHtml(`${formatarData(item.data)} ${item.hora || ''}`)}</span>
                 </div>
                 <div class="movimentacao-meta">
-                    <span><strong>Descrição:</strong> ${item.descricao}</span>
+                    <span><strong>Descrição:</strong> ${escaparHtml(item.descricao || '')}</span>
                     <span class="mov-assinatura-bloco"><strong>Assinatura:</strong> ${assinaturaHtml}</span>
                 </div>
                 ${itensHtml}
@@ -10691,35 +10926,35 @@
             }
             const termo = resultado.data;
             const metodoFinalNormalizado = normalizarTexto(termo.metodoFinal);
-            let metodoEncerramentoHtml = '';
+            let descricaoMetodo = '';
             if (termo.metodoFinal) {
-                let descricaoMetodo = 'Assinatura digital';
+                descricaoMetodo = 'Assinatura digital';
                 if (metodoFinalNormalizado === 'cpf') {
                     descricaoMetodo = `Confirmação por CPF (${termo.cpfConfirmacao || ''})`;
                 } else if (metodoFinalNormalizado === 'manual') {
                     descricaoMetodo = 'Finalização manual (sem assinatura digital)';
                 }
-                metodoEncerramentoHtml = `<p><strong>Método de encerramento:</strong> ${descricaoMetodo}</p>`;
             }
 
-            const html = `
-                <p><strong>Paciente:</strong> ${termo.paciente}</p>
-                <p><strong>Prontuário:</strong> ${termo.prontuario}</p>
-                <p><strong>Setor:</strong> ${termo.setor}</p>
-                <p><strong>Leito:</strong> ${termo.leito}</p>
-                <p><strong>Acompanhante:</strong> ${termo.acompanhante}</p>
-                ${termo.telefone ? `<p><strong>Telefone:</strong> ${termo.telefone}</p>` : ''}
-                ${termo.documento ? `<p><strong>Documento:</strong> ${termo.documento}</p>` : ''}
-                ${termo.parentesco ? `<p><strong>Parentesco:</strong> ${termo.parentesco}</p>` : ''}
-                <p><strong>Volumes:</strong> ${termo.descricaoVolumes}</p>
-                <p><strong>Aplicado em:</strong> ${formatarDataHora(termo.aplicadoEm)}</p>
-                ${termo.finalizadoEm ? `<p><strong>Finalizado em:</strong> ${formatarDataHora(termo.finalizadoEm)}</p>` : '<p><strong>Status:</strong> Em andamento</p>'}
-                ${metodoEncerramentoHtml}
-            `;
+            const html = gerarLinhasResumo([
+                ['Paciente', termo.paciente],
+                ['Prontuário', termo.prontuario],
+                ['Setor', termo.setor],
+                ['Leito', termo.leito],
+                ['Acompanhante', termo.acompanhante],
+                ['Telefone', termo.telefone],
+                ['Documento', termo.documento],
+                ['Parentesco', termo.parentesco],
+                ['Volumes', termo.descricaoVolumes],
+                ['Aplicado em', formatarDataHora(termo.aplicadoEm)],
+                termo.finalizadoEm
+                    ? ['Finalizado em', formatarDataHora(termo.finalizadoEm)]
+                    : ['Status', 'Em andamento'],
+                ['Método de encerramento', descricaoMetodo]
+            ]);
             Swal.fire({
                 title: `Termo - Armário ${armario.numero}`,
                 html,
-                icon: 'info',
                 confirmButtonText: 'Fechar'
             });
         }
@@ -10737,26 +10972,51 @@
                 mostrarErro('Armário não encontrado para liberação.');
                 return;
             }
-            const resumoHtml = `
-                <div class="info-box" style="text-align:left;">
-                    <p><strong>Visitante:</strong> ${armario.nomeVisitante || '-'}</p>
-                    <p><strong>Paciente:</strong> ${armario.nomePaciente || '-'}</p>
-                    <p><strong>Leito:</strong> ${armario.leito || '-'}</p>
-                    <p><strong>Volumes:</strong> ${formatarVolumeParaExibicao(armario.volumes)}</p>
-                    <p><strong>Início:</strong> ${armario.horaInicio || '-'}</p>
-                    ${armario.visitaEstendida
-                        ? '<p><strong>Visita:</strong> Estendida</p>'
-                        : (armario.horaPrevista ? `<p><strong>Previsão de saída:</strong> ${armario.horaPrevista}</p>` : '')}
-                    ${armario.whatsapp ? `<p><strong>WhatsApp:</strong> ${armario.whatsapp}</p>` : ''}
-                </div>
-            `;
+            const resumoHtml = gerarLinhasResumo([
+                ['Visitante', armario.nomeVisitante || '-'],
+                ['Paciente', armario.nomePaciente || '-'],
+                ['Leito', armario.leito || '-'],
+                ['Volumes', formatarVolumeParaExibicao(armario.volumes)],
+                ['Início', armario.horaInicio || '-'],
+                armario.visitaEstendida
+                    ? ['Visita', 'Estendida']
+                    : ['Previsão de saída', armario.horaPrevista || ''],
+                ['WhatsApp', armario.whatsapp || '']
+            ]);
+            const tempoUsoLiberacao = calcularTempoDecorridoUso(armario);
             const resultado = await Swal.fire({
-                title: `Encerrar armário ${armario.numero}?`,
-                html: `${resumoHtml}<p style="margin-top:12px; color:#4b5563;">Confirme que as informações estão corretas para finalizar o armário do visitante.</p>`,
-                icon: 'question',
+                html: `
+                    <div class="armario-modal-card liberacao-confirm">
+                        <header class="armario-modal-header status-livre">
+                            <div class="armario-modal-hero">
+                                <div class="armario-modal-icon liberar">
+                                    <i class="fas fa-unlock" aria-hidden="true"></i>
+                                </div>
+                                <div>
+                                    <div class="armario-modal-eyebrow">Encerrar custódia • Visitante</div>
+                                    <h2 class="armario-modal-title">Armário ${escaparHtml(armario.numero || '-')}</h2>
+                                    ${tempoUsoLiberacao ? `<p class="armario-modal-subtitle">Em uso ${escaparHtml(tempoUsoLiberacao)}</p>` : ''}
+                                </div>
+                            </div>
+                        </header>
+                        ${resumoHtml}
+                        <div class="liberacao-aviso">
+                            <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                            <span>Confira os dados acima. Ao confirmar, a custódia é finalizada e o armário volta a ficar livre.</span>
+                        </div>
+                    </div>
+                `,
                 showCancelButton: true,
-                confirmButtonText: 'Confirmo a liberação',
+                showCloseButton: true,
+                confirmButtonText: '<i class="fas fa-check" aria-hidden="true"></i> Confirmo a liberação',
                 cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'armario-modal-popup',
+                    confirmButton: 'armario-modal-primary',
+                    cancelButton: 'armario-modal-tertiary'
+                },
                 focusConfirm: false
             });
             if (!resultado.isConfirmed) {
@@ -10821,20 +11081,18 @@
                     return formatarVolumeParaExibicao(valorBruto);
                 })();
 
-                return `
-                    <div class="info-box" style="text-align:left;">
-                        <p><strong>Acompanhante:</strong> ${acompanhante}</p>
-                        <p><strong>Paciente:</strong> ${paciente}</p>
-                        ${prontuario ? `<p><strong>Prontuário:</strong> ${prontuario}</p>` : ''}
-                        ${setorLeito ? `<p><strong>Setor/Leito:</strong> ${setorLeito}</p>` : ''}
-                        <p><strong>Volumes declarados:</strong> ${volumesResumo}</p>
-                        ${inicioUso ? `<p><strong>Início:</strong> ${inicioUso}</p>` : ''}
-                        ${aplicadoEm ? `<p><strong>Aplicado em:</strong> ${aplicadoEm}</p>` : ''}
-                        ${telefone ? `<p><strong>Contato:</strong> ${telefone}</p>` : ''}
-                        ${documento ? `<p><strong>Documento:</strong> ${documento}</p>` : ''}
-                        ${parentesco ? `<p><strong>Parentesco:</strong> ${parentesco}</p>` : ''}
-                    </div>
-                `;
+                return gerarLinhasResumo([
+                    ['Acompanhante', acompanhante],
+                    ['Paciente', paciente],
+                    ['Prontuário', prontuario],
+                    ['Setor/Leito', setorLeito],
+                    ['Volumes declarados', volumesResumo],
+                    ['Início', inicioUso],
+                    ['Aplicado em', aplicadoEm],
+                    ['Contato', telefone],
+                    ['Documento', documento],
+                    ['Parentesco', parentesco]
+                ]);
             };
 
             const atualizarResumoModal = (estadoTermo = 'carregando') => {
@@ -10881,17 +11139,41 @@
 
             const termoPromise = carregarTermo();
 
+            const tempoUsoLiberacao = calcularTempoDecorridoUso(armario);
             const resultadoConfirmacao = await Swal.fire({
-                title: `Encerrar armário ${armario.numero}?`,
                 html: `
-                    <div id="${resumoId}">${gerarResumoHtml(null)}</div>
-                    <p id="${statusId}" class="liberacao-status liberacao-status--loading">Buscando dados do termo...</p>
-                    <p style="margin-top:12px; color:#4b5563;">Confirme que as informações estão corretas para finalizar o armário do acompanhante.</p>
+                    <div class="armario-modal-card liberacao-confirm">
+                        <header class="armario-modal-header status-livre">
+                            <div class="armario-modal-hero">
+                                <div class="armario-modal-icon liberar">
+                                    <i class="fas fa-unlock" aria-hidden="true"></i>
+                                </div>
+                                <div>
+                                    <div class="armario-modal-eyebrow">Encerrar custódia • Acompanhante</div>
+                                    <h2 class="armario-modal-title">Armário ${escaparHtml(armario.numero || '-')}</h2>
+                                    ${tempoUsoLiberacao ? `<p class="armario-modal-subtitle">Em uso ${escaparHtml(tempoUsoLiberacao)}</p>` : ''}
+                                </div>
+                            </div>
+                        </header>
+                        <div id="${resumoId}">${gerarResumoHtml(null)}</div>
+                        <p id="${statusId}" class="liberacao-status liberacao-status--loading">Buscando dados do termo...</p>
+                        <div class="liberacao-aviso">
+                            <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                            <span>Após confirmar, será coletada a assinatura de encerramento do acompanhante para finalizar o termo e liberar o armário.</span>
+                        </div>
+                    </div>
                 `,
-                icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Confirmo a liberação',
+                showCloseButton: true,
+                confirmButtonText: '<i class="fas fa-check" aria-hidden="true"></i> Confirmo a liberação',
                 cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'armario-modal-popup',
+                    confirmButton: 'armario-modal-primary',
+                    cancelButton: 'armario-modal-tertiary'
+                },
                 focusConfirm: false,
                 willOpen: () => atualizarResumoModal('carregando')
             });
